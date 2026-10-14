@@ -1,0 +1,97 @@
+{
+  "sourceRoot": "C:\\Users\\enekr\\OneDrive\\Документы\\Arhimed",
+  "files": [
+    {
+      "path": "src/App.tsx",
+      "sha256": "2f3cc7bc11a22273b8f8f5d4f33c6b0d746b5229bb2f823b31777297c356b090"
+    },
+    {
+      "path": "src/components/ChatPanel.tsx",
+      "sha256": "1b8848dfe2d79a765f2f1a618018c48fabbfffdb9f3704ed0632a6386bbd0b86"
+    },
+    {
+      "path": "src/components/CodeEditor.tsx",
+      "sha256": "3f66a8bf8f8482946c107c8ea9344bc04c9a3845badb5a0e99ccbb1fbac356c7"
+    },
+    {
+      "path": "src/components/Logo.tsx",
+      "sha256": "261a90a432d3c210a62155f31b8f2451e89e02fa5a26fa7e85986943bedd40c7"
+    },
+    {
+      "path": "src/components/Panel.tsx",
+      "sha256": "6fcda9a6cb9d507aae576d3b9992979cde3e64dadbebaae5ecfbdc9d45e5ca75"
+    },
+    {
+      "path": "src/components/Player.tsx",
+      "sha256": "353c23c1013992077e909f7392bb845f20ca33273517f1274220cb32d937501f"
+    },
+    {
+      "path": "src/components/SettingsModal.tsx",
+      "sha256": "34cc09a63500d5042134250b055b83ee88789d6c9154b91cdd4071c410055356"
+    },
+    {
+      "path": "src/components/Sidebar.tsx",
+      "sha256": "31cc5089195adde2ce5759ef883c482398f42f71147b51d65064a917b94c8ed8"
+    },
+    {
+      "path": "src/engine/colors.ts",
+      "sha256": "37a4c712835ed08abd25761b7f45242505eedf5b564827aa5d115fd44b28436a"
+    },
+    {
+      "path": "src/engine/fonts.ts",
+      "sha256": "b53079e5dbf36474e49eb31a3def7136e201d8dc170c1acd78a98f2f42903626"
+    },
+    {
+      "path": "src/engine/interpreter.ts",
+      "sha256": "c5603c87017e71fe0ca74b7556e3ebfdac734a33b91974433bd28f64cf0109c6"
+    },
+    {
+      "path": "src/engine/mobject.ts",
+      "sha256": "e1459deb58361674c01a35912c0bd5bbd08b47ba2513223b2b0a0c1e18df6bbc"
+    },
+    {
+      "path": "src/engine/morph.ts",
+      "sha256": "2c949854232ac5af6bffe3cee9e02b232687c5b2baa2459b96ff9ab4b8a9b303"
+    },
+    {
+      "path": "src/engine/parser.ts",
+      "sha256": "580253b7f565f57f9290bf86cf7f908d4b8996da4af2cba114999f64e4df963c"
+    },
+    {
+      "path": "src/engine/renderer.ts",
+      "sha256": "9f495573ded07ca0e7e0016f654483548ea6794f77872a613cd73a426e4f26ae"
+    },
+    {
+      "path": "src/index.css",
+      "sha256": "77df37332694842a00219750e9d774debcb1f19833189c174b47ffeac5596342"
+    },
+    {
+      "path": "src/lib/assistant.ts",
+      "sha256": "acf5ca346d968b12f6d4709af5f3220fd983bd6680987e4501eb52d6fb1bf6e7"
+    },
+    {
+      "path": "src/lib/store.ts",
+      "sha256": "21b1696e8cec35b6c8e6f03c429c499dfee5494db93c41ef66aa06c2f5e58c78"
+    },
+    {
+      "path": "src/lib/templates.ts",
+      "sha256": "0040ea7bbab95ba872ff50f289bcf19449b30809535c69e28e52e6302ccb9b39"
+    },
+    {
+      "path": "src/main.tsx",
+      "sha256": "f268dc44f71240012de0cfb1569d8ac906265cccd45eb3a99059c1a663d2f830"
+    },
+    {
+      "path": "src/pages/Landing.tsx",
+      "sha256": "c84ac1038098469a5249b933d4864d2aafd99d5a41f4b00a91cdd91e74e2ae79"
+    },
+    {
+      "path": "src/pages/Studio.tsx",
+      "sha256": "1a668ec1bd7a127aa05d9659c98a8cc37ffc61762f607409ef7530bd1484468f"
+    },
+    {
+      "path": "src/utils/cn.ts",
+      "sha256": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27"
+    }
+  ]
+}

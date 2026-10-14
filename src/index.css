@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-hand: "Caveat", cursive;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-serif: "PT Serif", Georgia, serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 160, 0.25);
+  border-radius: 8px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.draw-path {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: draw 1.6s ease forwards;
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+.float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: fade-up 0.6s ease both;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.caret::after {
+  content: "▍";
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+  color: #3b82f6;
+}
+
+.code-area {
+  caret-color: #2563eb;
+}
+.tab-size-4 {
+  tab-size: 4;
+}
+.code-theme .tk-k { color: #d73a49; }
+.code-theme .tk-s { color: #0a6b3d; }
+.code-theme .tk-n { color: #005cc5; }
+.code-theme .tk-f { color: #6f42c1; }
+.code-theme .tk-self { color: #e36209; }
+.code-theme .tk-c { color: #94a3b8; font-style: italic; }
+.code-theme .tk-p { color: #64748b; }
+.code-theme .tk-const { color: #005cc5; }
+.code-theme .tk-col { color: #0f172a; }
+.dark .code-theme .tk-k { color: #ff7b93; }
+.dark .code-theme .tk-s { color: #7ee2a8; }
+.dark .code-theme .tk-n { color: #79b8ff; }
+.dark .code-theme .tk-f { color: #c4a5ff; }
+.dark .code-theme .tk-self { color: #ffab70; }
+.dark .code-theme .tk-c { color: #64748b; }
+.dark .code-theme .tk-p { color: #8b98ad; }
+.dark .code-theme .tk-const { color: #79b8ff; }
+.dark .code-theme .tk-col { color: #e2e8f0; }
+.dark .code-area {
+  caret-color: #93c5fd;
+}
