@@ -21,6 +21,10 @@ The source baseline hashes remain in `docs/source-baseline.json`; the original s
 
 Dedicated experiment repository: `resarytrew/arhimed-runtime-lab`. The Studio codebase will not receive a ManimGX adapter until the public, isolated real-runtime experiment reaches its stated acceptance criteria.
 
+First configuration result (commit `bbb150e3fd566b7a47fcb65c0af40752f09de445`): **negative in Chrome 155.0.8059.40 and Edge 155.0.4283.45 on Windows 11 / RTX 3070**. A real `manimgx@0.1.1` custom element was executed in an opaque-origin `sandbox="allow-scripts"` iframe. Classic Blob Workers start, but Blob module Workers do not. ManimGX 0.1.1 requires the latter and reports `ManimGX could not start`; no adapter or automatic sandbox weakening has been introduced.
+
+The same verified configuration blocks synthetic parent DOM, localStorage and IndexedDB controls, external and localhost egress (including a Worker probe), and forged/malformed messages. The lab report, fixed runtime hashes and GitHub Pages workflow are in the external experiment repository. Different paths on `resarytrew.github.io` are one origin, so configuration 2 needs a separately administered HTTPS origin before it can be tested; provision of that origin is an open infrastructure prerequisite. Until then, Canvas and prepared video fallbacks remain the only browser publication paths.
+
 - Stages 2–5: BLOCKED BY PREVIOUS GATES. No universal adapter, new runtime, or project migration has been introduced.
 
 The architecture specification describes the target, not completed features. Record evidence and unresolved conditions here before advancing.
