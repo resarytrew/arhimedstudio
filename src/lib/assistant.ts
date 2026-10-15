@@ -72,17 +72,31 @@ function setBackground(code: string, color: string) {
 
 /** Local "assistant": understands typical lesson topics and simple edits. */
 function gxStarterCode(topic: string) {
-  const safeTitle = topic.replace(/["\\]/g, "'").slice(0, 72) || "Новая сцена";
+  const safeTitle = topic.replace(/["\\]/g, "'").slice(0, 42) || "Новая сцена";
   return `import manimgx as m
 
 class LessonScene(m.Scene):
     def construct(self):
-        title = m.Text("${safeTitle}", font_size=38).to_edge(m.UP)
-        circle = m.Circle(radius=1.25, color=m.TEAL, fill_opacity=0.2)
-        caption = m.Text("Настроим сцену вместе", font_size=28).next_to(circle, m.DOWN)
-        self.play(m.Write(title), m.Create(circle), run_time=1.0)
-        self.play(m.Write(caption), run_time=0.8)
-        self.wait(1.0)
+        title = m.Text("${safeTitle}", font_size=36).to_edge(m.UP, buff=0.45)
+        question = m.Text("Как устроена эта идея?", font_size=26, color=m.TEAL).next_to(title, m.DOWN, buff=0.28)
+        model = m.Circle(radius=1.05, color=m.TEAL, fill_opacity=0.16).shift(1.25 * m.LEFT + 0.15 * m.DOWN)
+        input_arrow = m.Arrow(m.LEFT * 4.5, m.LEFT * 2.35 + 0.15 * m.DOWN, color=m.BLUE, buff=0.15)
+        output_arrow = m.Arrow(m.RIGHT * 0.15 + 0.15 * m.DOWN, m.RIGHT * 2.35 + 0.15 * m.DOWN, color=m.YELLOW, buff=0.15)
+        input_label = m.Text("данные", font_size=25, color=m.BLUE).next_to(input_arrow, m.UP, buff=0.18)
+        output_label = m.Text("результат", font_size=25, color=m.YELLOW).next_to(output_arrow, m.UP, buff=0.18)
+        observation = m.Text("Построим модель и проследим изменение", font_size=25).to_edge(m.DOWN, buff=0.72)
+        conclusion = m.Text("Вывод: связь видна на каждом шаге", font_size=25, color=m.TEAL).to_edge(m.DOWN, buff=0.72)
+        self.play(m.Write(title), run_time=1.1)
+        self.wait(0.6)
+        self.play(m.Write(question), run_time=1.0)
+        self.wait(0.6)
+        self.play(m.Create(model), m.Create(input_arrow), m.Write(input_label), run_time=1.4)
+        self.play(m.Create(output_arrow), m.Write(output_label), run_time=1.25)
+        self.wait(0.8)
+        self.play(m.Write(observation), run_time=1.2)
+        self.wait(0.9)
+        self.play(m.Transform(observation, conclusion), run_time=1.3)
+        self.wait(1.9)
 `;
 }
 
@@ -92,16 +106,64 @@ import numpy as np
 
 class TaylorSine(m.Scene):
     def construct(self):
-        title = m.Text("sin(x) и полином Тейлора", font_size=38).to_edge(m.UP)
-        axes = m.Axes(x_range=[-3.2, 3.2, 1], y_range=[-1.5, 1.5, 1], x_length=9.2, y_length=4.8, tips=False)
+        title = m.Text("sin(x) и полином Тейлора", font_size=36).to_edge(m.UP, buff=0.42)
+        subtitle = m.Text("Сравним приближения около нуля", font_size=24, color=m.TEAL).next_to(title, m.DOWN, buff=0.22)
+        axes = m.Axes(x_range=[-3.2, 3.2, 1], y_range=[-1.5, 1.5, 1], x_length=8.6, y_length=3.8, tips=False).shift(0.18 * m.DOWN)
         sine = axes.plot(lambda x: np.sin(x), x_range=[-3.0, 3.0], color=m.TEAL)
-        taylor = axes.plot(lambda x: x - x**3 / 6 + x**5 / 120, x_range=[-3.0, 3.0], color=m.YELLOW)
-        sine_label = m.Text("sin(x)", font_size=26, color=m.TEAL).next_to(axes.c2p(2.3, 0.7), m.UP)
-        taylor_label = m.Text("x − x³/6 + x⁵/120", font_size=23, color=m.YELLOW).next_to(axes.c2p(0.0, -1.15), m.DOWN)
-        self.play(m.Write(title), m.Create(axes), run_time=1.2)
-        self.play(m.Create(sine), m.Write(sine_label), run_time=1.2)
-        self.play(m.Create(taylor), m.Write(taylor_label), run_time=1.4)
-        self.wait(1.0)
+        linear = axes.plot(lambda x: x, x_range=[-1.6, 1.6], color=m.BLUE)
+        cubic = axes.plot(lambda x: x - x**3 / 6, x_range=[-2.35, 2.35], color=m.YELLOW)
+        fifth = axes.plot(lambda x: x - x**3 / 6 + x**5 / 120, x_range=[-3.0, 3.0], color=m.ORANGE)
+        sine_label = m.Text("точный sin(x)", font_size=23, color=m.TEAL).next_to(axes.c2p(2.05, 0.7), m.UP, buff=0.16)
+        formula = m.Text("x − x³/6 + x⁵/120", font_size=26, color=m.ORANGE).to_edge(m.DOWN, buff=0.68)
+        observation = m.Text("Больше членов — точнее кривая", font_size=24).to_edge(m.DOWN, buff=0.68)
+        self.play(m.Write(title), run_time=1.1)
+        self.wait(0.55)
+        self.play(m.Write(subtitle), m.Create(axes), run_time=1.35)
+        self.wait(0.55)
+        self.play(m.Create(sine), m.Write(sine_label), run_time=1.25)
+        self.wait(0.65)
+        self.play(m.Create(linear), run_time=1.2)
+        self.wait(0.75)
+        self.play(m.Transform(linear, cubic), run_time=1.35)
+        self.wait(0.75)
+        self.play(m.Transform(linear, fifth), m.Write(formula), run_time=1.45)
+        self.wait(0.8)
+        self.play(m.Transform(formula, observation), run_time=1.15)
+        self.wait(1.35)
+`;
+}
+
+function canvasStarterCode(topic: string) {
+  const safeTitle = topic.replace(/["\\\n]/g, " ").trim().slice(0, 42) || "Новая сцена";
+  return `import manimx as m
+
+class LessonScene(m.Scene):
+    def construct(self):
+        title = m.Text("${safeTitle}", font_size=36).to_edge(m.UP, buff=0.48)
+        question = m.Text("Как работает эта идея?", font_size=25, color=m.TEAL).next_to(title, m.DOWN, buff=0.25)
+        source = m.Circle(radius=0.82, color=m.BLUE, fill_opacity=0.22).shift(3.0 * m.LEFT + 0.12 * m.DOWN)
+        model = m.Square(side_length=1.65, color=m.TEAL, fill_opacity=0.18).shift(0.12 * m.DOWN)
+        result = m.Circle(radius=0.82, color=m.YELLOW, fill_opacity=0.22).shift(3.0 * m.RIGHT + 0.12 * m.DOWN)
+        arrow_a = m.Arrow(2.1 * m.LEFT + 0.12 * m.DOWN, 0.95 * m.LEFT + 0.12 * m.DOWN, color=m.LIGHT_GRAY, buff=0.16)
+        arrow_b = m.Arrow(0.95 * m.RIGHT + 0.12 * m.DOWN, 2.1 * m.RIGHT + 0.12 * m.DOWN, color=m.LIGHT_GRAY, buff=0.16)
+        label_a = m.Text("вход", font_size=23, color=m.BLUE).next_to(source, m.DOWN, buff=0.24)
+        label_b = m.Text("модель", font_size=23, color=m.TEAL).next_to(model, m.DOWN, buff=0.24)
+        label_c = m.Text("результат", font_size=23, color=m.YELLOW).next_to(result, m.DOWN, buff=0.24)
+        observation = m.Text("Проследим путь величины по шагам", font_size=24).to_edge(m.DOWN, buff=0.72)
+        conclusion = m.Text("Вывод: модель связывает вход и результат", font_size=24, color=m.TEAL).to_edge(m.DOWN, buff=0.72)
+        self.play(m.Write(title), run_time=1.1)
+        self.wait(0.6)
+        self.play(m.Write(question), run_time=1.0)
+        self.wait(0.55)
+        self.play(m.Create(source), m.Write(label_a), run_time=1.15)
+        self.play(m.Create(arrow_a), m.Create(model), m.Write(label_b), run_time=1.35)
+        self.wait(0.65)
+        self.play(m.Create(arrow_b), m.Create(result), m.Write(label_c), run_time=1.3)
+        self.play(m.Write(observation), run_time=1.1)
+        self.wait(0.85)
+        self.play(m.Indicate(model), run_time=1.1)
+        self.play(m.Transform(observation, conclusion), run_time=1.2)
+        self.wait(1.55)
 `;
 }
 
@@ -167,7 +229,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   return {
     text:
       `Подготовил стартовую сцену-заготовку по теме «${nice}»: заголовок, акцентная линия и набор фигур, которые можно превратить в иллюстрацию. Уточните, что именно показать (например, формулу, график или шаги решения), — и я дострою анимацию. В офлайн-режиме я лучше всего знаю темы: кинематика, графы, линейная алгебра, ряды, геометрия, тригонометрия и производные. Подключите языковую модель в настройках, чтобы генерировать любые сцены.`,
-    code: engine === "manimgx-browser" ? gxStarterCode(nice) : genericCode(nice),
+    code: engine === "manimgx-browser" ? gxStarterCode(nice) : canvasStarterCode(nice),
     title: isFirst ? nice.slice(0, 32) : undefined,
   };
 }

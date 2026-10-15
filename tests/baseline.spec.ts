@@ -235,6 +235,10 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
     const { AI_ENGINE_PROFILES, AIOrchestratorV1 } = await import('/src/ai/orchestrator.ts');
     // @ts-expect-error browser source module
     const { validateAiCandidate } = await import('/src/ai/validation.ts');
+    // @ts-expect-error browser source module
+    const { localAssistant } = await import('/src/lib/assistant.ts');
+    // @ts-expect-error browser source module
+    const { runScript } = await import('/src/engine/interpreter.ts');
     const orchestrator = new AIOrchestratorV1();
     const candidate = await orchestrator.generate({
       projectId: 'gx-taylor', engine: 'manimgx-browser', baseRevision: 'r1',
@@ -248,6 +252,8 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
       badImport: validateAiCandidate('import manimgx as m\nimport math\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(1)\n', 'manimgx-browser'),
       badNumpy: validateAiCandidate('import manimgx as m\nimport numpy as np\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(np.math.factorial(3))\n', 'manimgx-browser'),
       badCanvas: validateAiCandidate('import manimx as m\n\nclass A(m.Scene):\n    def construct(self):\n        t = m.ValueTracker(0)\n        self.wait(1)\n', 'arhimed-canvas'),
+      cramped: validateAiCandidate('import manimgx as m\n\nclass A(m.Scene):\n    def construct(self):\n        title = m.Text("Очень длинный заголовок, который не помещается в кадр", font_size=64)\n        self.play(m.Write(title), run_time=0.2)\n', 'manimgx-browser'),
+      canvasFallback: runScript(localAssistant('Объясни фотосинтез', '', true, 'arhimed-canvas').code ?? '').duration,
     };
   });
   expect(result.canvasPrompt).toContain('Не используй ValueTracker');
@@ -259,4 +265,6 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
   expect(result.badImport.status).toBe('rejected');
   expect(result.badNumpy.status).toBe('rejected');
   expect(result.badCanvas.status).toBe('rejected');
+  expect(result.cramped.status).toBe('rejected');
+  expect(result.canvasFallback).toBeGreaterThanOrEqual(12);
 });

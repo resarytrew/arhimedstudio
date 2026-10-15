@@ -44,6 +44,7 @@ function balanced(source: string) {
 /** Lightweight, non-executing guard. A passed result is never a claim that Python has run. */
 export function validateAiCandidate(source: string, engineId: AiEngineId): AiCandidateValidationV1 {
   const diagnostics: AiCandidateDiagnosticV1[] = [];
+  const warnings: AiCandidateDiagnosticV1[] = [];
   const reject = (message: string, pattern?: RegExp) => diagnostics.push({ line: pattern ? lineOf(source, pattern) : undefined, message });
   if (!source.trim()) reject("ИИ не вернул исходный код сцены.");
   const expectedImport = engineId === "manimgx-browser" ? "import manimgx as m" : "import manimx as m";
@@ -73,9 +74,28 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
     ];
   for (const [pattern, message] of forbidden) if (pattern.test(source)) reject(message, pattern);
 
+  const oversizedFont = /font_size\s*=\s*(\d+(?:\.\d+)?)/g;
+  for (let match = oversizedFont.exec(source); match; match = oversizedFont.exec(source)) {
+    const size = Number(match[1]);
+    const line = source.slice(0, match.index).split("\n").length;
+    if (size > 56) diagnostics.push({ line, message: `Размер текста ${size} превышает предел 56 и может выйти за кадр.` });
+    else if (size > 48) warnings.push({ line, message: `Размер текста ${size} больше рекомендуемого предела 48: проверьте композицию в превью.` });
+  }
+
   if (diagnostics.length) return { status: "rejected", engineId, diagnostics };
-  const warnings: AiCandidateDiagnosticV1[] = [];
   if (source.split("\n").length > 260) warnings.push({ message: "Сцена длиннее 260 строк: проверьте её по частям перед применением." });
-  if (!/self\.play\s*\(/.test(source)) warnings.push({ message: "Не найден self.play(...): сцена может оказаться статичной." });
+  const playCount = (source.match(/self\.play\s*\(/g) ?? []).length;
+  if (!playCount) warnings.push({ message: "Не найден self.play(...): сцена может оказаться статичной." });
+  else if (playCount < 5) warnings.push({ message: `Найдено только ${playCount} этапа анимации. Для учебной сцены добавьте построение, наблюдение и вывод.` });
+
+  const explicitRunTimes = [...source.matchAll(/run_time\s*=\s*(\d+(?:\.\d+)?)/g)].reduce((total, match) => total + Number(match[1]), 0);
+  const waits = [...source.matchAll(/self\.wait\s*\(\s*(\d+(?:\.\d+)?)?\s*\)/g)].reduce((total, match) => total + Number(match[1] ?? 1), 0);
+  const estimatedDuration = explicitRunTimes + waits + Math.max(0, playCount - (source.match(/run_time\s*=/g) ?? []).length);
+  if (playCount && estimatedDuration < 12) warnings.push({ message: `Оценочная длительность ${estimatedDuration.toFixed(1)} с меньше рекомендуемых 12 с. Добавьте содержательные этапы и паузы.` });
+
+  const longText = /m\.(?:Text|Tex)\(\s*["']([^"']{43,})["']/g;
+  for (let match = longText.exec(source); match; match = longText.exec(source)) {
+    warnings.push({ line: source.slice(0, match.index).split("\n").length, message: "Длинная текстовая подпись может не поместиться в кадр; сократите её или разбейте на строки." });
+  }
   return { status: warnings.length ? "warning" : "passed", engineId, diagnostics: warnings };
 }
