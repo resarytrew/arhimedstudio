@@ -56,6 +56,35 @@ test('Canvas interpreter reports an incomplete call with a source line', async (
   expect(error).toEqual({ message: 'Error: Синтаксическая ошибка: Ожидалась «)», найден конец строки', line: 4 });
 });
 
+test('Canvas keeps module constants, tuple bindings and typed helper functions available to construct', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { runScript } = await import('/src/engine/interpreter.ts');
+    const timeline = runScript(`import numpy as np
+import manimx as m
+BG = "#0B1220"
+X0, X1 = 1.0, 2.0
+C = np.array([X0, X1, 0])
+
+def point(scale: float) -> np.ndarray:
+    if scale > 0:
+        return C + np.array([scale, 0, 0])
+    return C
+
+class ModuleScope(m.Scene):
+    def construct(self):
+        panel = m.Rectangle(width=2, height=1, fill_color=BG, fill_opacity=1)
+        marker = m.Dot(point(1.0))
+        self.play(m.FadeIn(panel), m.FadeIn(marker), run_time=0.1)
+`);
+    return { duration: timeline.duration, final: timeline.final.map((mob) => ({ fill: mob.fill, pos: mob.pos })) };
+  });
+  expect(report.duration).toBe(0.1);
+  expect(report.final).toHaveLength(2);
+  expect(report.final).toContainEqual(expect.objectContaining({ fill: '#0B1220' }));
+});
+
 test('legacy project survives reload, editing, syntax errors and panel changes', async ({ page }) => {
   const source='import manimx as m\nclass Legacy(m.Scene):\n    def construct(self):\n        self.play(m.Create(m.Circle()))\n        self.wait(0.2)\n';
   await page.goto('/');

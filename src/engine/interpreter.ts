@@ -154,6 +154,12 @@ interface Line {
   indent: number;
   no: number;
 }
+interface ReturnSignal {
+  __returnSignal: true;
+  value: any;
+}
+
+const isReturnSignal = (value: unknown): value is ReturnSignal => !!value && typeof value === "object" && (value as ReturnSignal).__returnSignal === true;
 function stripComment(l: string) {
   let q: string | null = null;
   for (let i = 0; i < l.length; i++) {
@@ -179,6 +185,27 @@ function depthOf(s: string) {
     else if (")]}".includes(c)) d--;
   }
   return d;
+}
+function splitTopLevel(src: string, separator = ",") {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let start = 0;
+  for (let i = 0; i < src.length; i++) {
+    const char = src[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") quote = char;
+    else if ("([{".includes(char)) depth++;
+    else if (char === ")" || char === "]" || char === "}") depth--;
+    else if (char === separator && depth === 0) {
+      parts.push(src.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(src.slice(start).trim());
+  return parts;
 }
 function preprocess(code: string): Line[] {
   const raw = code.replace(/\t/g, "    ").split("\n");
@@ -241,6 +268,12 @@ class Interpreter {
     if (cls) this.sceneName = cls.text.match(/^class\s+(\w+)/)?.[1] ?? "Scene";
     const idx = lines.findIndex((l) => /^def\s+construct\s*\(/.test(l.text));
     let body: Line[];
+    // Python module constants and helpers are evaluated before construct(). This keeps normal
+    // Manim source such as `BG = "#0B1220"` and top-level helper functions available to scenes.
+    // Imports remain declarative because the Canvas dialect exposes its fixed m/np built-ins.
+    const classIndex = lines.findIndex((l) => /^class\s+/.test(l.text));
+    const prelude = classIndex >= 0 ? lines.slice(0, classIndex) : [];
+    this.execBlock(prelude);
     if (idx >= 0) {
       body = [];
       const base = lines[idx].indent;
@@ -259,7 +292,7 @@ class Interpreter {
     };
   }
 
-  execBlock(lines: Line[], local?: Map<string, any>) {
+  execBlock(lines: Line[], local?: Map<string, any>): ReturnSignal | undefined {
     let i = 0;
     while (i < lines.length) {
       const l = lines[i];
@@ -271,16 +304,23 @@ class Interpreter {
         while (j < lines.length && lines[j].indent > l.indent) sub.push(lines[j++]);
         return { sub, j };
       };
+      if (/^(import|from)\b/.test(l.text)) {
+        i++;
+        continue;
+      }
+      const returnM = l.text.match(/^return(?:\s+(.+))?$/);
+      if (returnM) return { __returnSignal: true, value: returnM[1] ? this.evalStr(returnM[1], local) : null };
       const forM = l.text.match(/^for\s+(.+?)\s+in\s+(.+):$/);
       if (forM) {
         const { sub, j } = collect(i + 1);
-        const iter = this.evalStr(forM[2]);
+        const iter = this.evalStr(forM[2], local);
         const arr = isMob(iter) ? iter.children : iter;
         if (!Array.isArray(arr)) this.err("Цикл for ожидает список или range(...)");
         for (const v of arr) {
           this.line = l.no;
-          this.assignTargets(forM[1], v);
-          this.execBlock(sub, local);
+          this.assignTargets(forM[1], v, local);
+          const returned = this.execBlock(sub, local);
+          if (returned) return returned;
         }
         i = j;
         continue;
@@ -304,15 +344,16 @@ class Interpreter {
         }
         for (const b of branches) {
           this.line = l.no;
-          if (b.cond === null || truthy(this.evalStr(b.cond))) {
-            this.execBlock(b.body, local);
+          if (b.cond === null || truthy(this.evalStr(b.cond, local))) {
+            const returned = this.execBlock(b.body, local);
+            if (returned) return returned;
             break;
           }
         }
         i = j;
         continue;
       }
-      if (/^(pass|return\b|global\b|nonlocal\b)/.test(l.text)) {
+      if (/^(pass|global\b|nonlocal\b)/.test(l.text)) {
         i++;
         continue;
       }
@@ -323,37 +364,40 @@ class Interpreter {
           const params = m[2].split(",").map((s) => s.trim()).filter(Boolean);
           const body = sub;
           this.vars.set(m[1], ((args: any[]) => {
-            const ret = body.find((b) => /^return\s+/.test(b.text));
-            params.forEach((p, k) => this.vars.set(p.split("=")[0].trim(), args[k]));
-            const pre = ret ? body.slice(0, body.indexOf(ret)) : body;
-            this.execBlock(pre);
-            return ret ? this.evalStr(ret.text.replace(/^return\s+/, "")) : null;
+            const scope = new Map<string, any>();
+            params.forEach((p, k) => {
+              const name = p.split("=")[0].split(":")[0].trim();
+              scope.set(name, args[k]);
+            });
+            const returned = this.execBlock(body, scope);
+            return returned?.value ?? null;
           }) as Fn);
         }
         i = j;
         continue;
       }
-      this.execStmt(l.text);
+      this.execStmt(l.text, local);
       i++;
     }
   }
 
-  assignTargets(target: string, v: any) {
+  assignTargets(target: string, v: any, scope?: Map<string, any>) {
     const names = target.replace(/[()]/g, "").split(",").map((s) => s.trim()).filter(Boolean);
-    if (names.length === 1) this.vars.set(names[0], v);
+    const destination = scope ?? this.vars;
+    if (names.length === 1) destination.set(names[0], v);
     else {
       const arr = isMob(v) ? v.children : v;
       if (!Array.isArray(arr)) this.err("Невозможно распаковать значение");
-      names.forEach((n, k) => this.vars.set(n, arr[k]));
+      names.forEach((n, k) => destination.set(n, arr[k]));
     }
   }
 
-  execStmt(text: string) {
+  execStmt(text: string, scope?: Map<string, any>) {
     const idxAsg = text.match(/^([A-Za-z_][\w.]*)\[(.+?)\]\s*=(?!=)\s*([\s\S]+)$/);
     if (idxAsg) {
-      const obj = this.evalStr(idxAsg[1]);
-      const key = this.evalStr(idxAsg[2]);
-      const val = this.evalStr(idxAsg[3]);
+      const obj = this.evalStr(idxAsg[1], scope);
+      const key = this.evalStr(idxAsg[2], scope);
+      const val = this.evalStr(idxAsg[3], scope);
       if (Array.isArray(obj)) obj[key < 0 ? obj.length + key : key] = val;
       else if (obj && typeof obj === "object" && !isMob(obj)) obj[key] = val;
       else this.err("Присваивание по индексу не поддерживается");
@@ -362,19 +406,20 @@ class Interpreter {
     const asg = text.match(/^([A-Za-z_][\w.]*(?:\s*,\s*[A-Za-z_]\w*)*)\s*([+\-*/])?=(?!=)\s*([\s\S]+)$/);
     if (asg) {
       const [, lhs, aug, rhs] = asg;
-      let val = this.evalStr(rhs);
+      const tupleValues = lhs.includes(",") ? splitTopLevel(rhs) : [];
+      let val = tupleValues.length > 1 ? tupleValues.map((value) => this.evalStr(value, scope)) : this.evalStr(rhs, scope);
       if (lhs.includes(".") && !lhs.includes(",")) {
         const dot = lhs.lastIndexOf(".");
-        const obj = this.evalStr(lhs.slice(0, dot));
+        const obj = this.evalStr(lhs.slice(0, dot), scope);
         const key = lhs.slice(dot + 1);
         if (obj && typeof obj === "object" && !isMob(obj)) obj[key] = val;
         return;
       }
-      if (aug) val = this.arith(aug, this.lookup(lhs.trim()), val);
-      this.assignTargets(lhs, val);
+      if (aug) val = this.arith(aug, this.lookup(lhs.trim(), scope), val);
+      this.assignTargets(lhs, val, scope);
       return;
     }
-    this.evalStr(text);
+    this.evalStr(text, scope);
   }
 
   evalStr(src: string, scope?: Map<string, any>): any {
