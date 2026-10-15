@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, ChevronLeft, ChevronRight, Code2, MessagesSquare, Plus, RotateCcw, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronLeft, ChevronRight, Code2, MessagesSquare, Plus, Sparkles, Square } from "lucide-react";
 import type { Message } from "../lib/store";
 import { TEMPLATES } from "../lib/templates";
 import { cn } from "../utils/cn";
@@ -10,8 +10,8 @@ interface Props {
   thinking: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
-  onRestore: (candidateRevision: string | undefined) => void;
-  onShowCode: () => void;
+  onAcceptCandidate: (candidateRevision: string | undefined) => void;
+  onReviewCandidate: (candidateRevision: string | undefined) => void;
   maximized: boolean;
   onMaximize: () => void;
   onClose: () => void;
@@ -155,18 +155,19 @@ export function ChatPanel(p: Props) {
                           </div>
                         </div>
                         <button
-                          onClick={p.onShowCode}
+                          onClick={() => p.onReviewCandidate(m.candidateRevision)}
                           className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-500/10"
                         >
                           Открыть
                         </button>
                         <button
-                          onClick={() => p.onRestore(m.candidateRevision)}
+                          onClick={() => p.onAcceptCandidate(m.candidateRevision)}
                           disabled={!m.candidateRevision}
-                          title="Принять кандидатную ревизию"
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+                          aria-label="Принять кандидатную ревизию"
+                          title="Применить и визуализировать"
+                          className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-2.5 py-1.5 text-[12px] font-medium text-white shadow-sm hover:bg-blue-600 disabled:opacity-40"
                         >
-                          <RotateCcw size={14} />
+                          <Check size={14} /> Применить
                         </button>
                       </div>
                     )}

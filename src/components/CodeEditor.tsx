@@ -58,9 +58,10 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   errorLine?: number | null;
+  readOnly?: boolean;
 }
 
-export function CodeEditor({ value, onChange, errorLine }: Props) {
+export function CodeEditor({ value, onChange, errorLine, readOnly = false }: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -78,6 +79,7 @@ export function CodeEditor({ value, onChange, errorLine }: Props) {
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (readOnly) return;
     const ta = e.currentTarget;
     if (e.key === "Tab") {
       e.preventDefault();
@@ -129,15 +131,17 @@ export function CodeEditor({ value, onChange, errorLine }: Props) {
         <textarea
           ref={taRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { if (!readOnly) onChange(e.target.value); }}
           onScroll={onScroll}
           onKeyDown={onKeyDown}
+          readOnly={readOnly}
           spellCheck={false}
           autoCapitalize="off"
           autoComplete="off"
           className={cn(
             shared,
-            "code-area scroll-thin absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent px-3 py-2 text-transparent outline-none selection:bg-blue-200/60 dark:selection:bg-blue-500/30"
+            "code-area scroll-thin absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent px-3 py-2 text-transparent outline-none selection:bg-blue-200/60 dark:selection:bg-blue-500/30",
+            readOnly && "cursor-default"
           )}
         />
       </div>

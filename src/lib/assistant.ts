@@ -15,6 +15,7 @@ export interface LLMSettings {
 }
 
 export interface LLMPreferences extends Omit<LLMSettings, "apiKey"> {}
+export type AssistantEngine = "arhimed-canvas" | "manimgx-browser";
 
 export const DEFAULT_LLM_PREFERENCES: LLMPreferences = {
   provider: "offline",
@@ -129,7 +130,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   };
 }
 
-const SYSTEM_PROMPT = `Ты — ИИ-помощник учителя в веб-приложении ArhimedStudio. Ты пишешь короткие обучающие анимации на Python в стиле Manim (модуль импортируется как "import manimx as m").
+const SYSTEM_PROMPT = `Ты — ИИ-помощник учителя в веб-приложении ArhimedStudio. Ты пишешь короткие обучающие анимации на Python в стиле Manim.
 Отвечай по-русски: 1–3 предложения о том, что показывает сцена, затем ОДИН блок кода \`\`\`python ... \`\`\`.
 Поддерживаемое подмножество (используй только его):
 - Объекты: m.Circle, m.Square, m.Rectangle, m.RoundedRectangle, m.Triangle, m.RegularPolygon, m.Polygon, m.Dot, m.Line, m.DashedLine, m.Arrow, m.DoubleArrow, m.Vector, m.Arc, m.Ellipse, m.Text, m.Tex, m.MathTex (простая LaTeX-разметка), m.Axes, m.NumberPlane, m.NumberLine, m.FunctionGraph, m.ParametricFunction, m.VGroup, m.SurroundingRectangle, m.BackgroundRectangle, m.Brace, m.DecimalNumber.
@@ -140,12 +141,25 @@ const SYSTEM_PROMPT = `Ты — ИИ-помощник учителя в веб-�
 - Поддерживаются циклы for, if/else, лямбды, словари и списки. НЕ используй list comprehension, updaters, ValueTracker, always_redraw, 3D.
 Кадр 14.2 × 8 единиц, центр (0,0). Подписи делай по-русски, шрифт font_size 28–48. Сцена — 5–20 секунд.`;
 
+function systemPromptFor(engine: AssistantEngine) {
+  if (engine === "manimgx-browser") {
+    return `${SYSTEM_PROMPT}
+
+РЕЖИМ: ManimGX 0.1.1. Первая строка кода строго: import manimgx as m. Допускается import numpy as np.
+Не добавляй другие import/from-импорты, динамическую загрузку пакетов, сеть или доступ к браузерным данным. Используй API ManimGX; ValueTracker и always_redraw разрешены.`;
+  }
+  return `${SYSTEM_PROMPT}
+
+РЕЖИМ: Arhimed Canvas. Первая строка кода строго: import manimx as m. Используй только указанное выше Canvas-подмножество. Не используй ValueTracker, always_redraw, updaters или 3D.`;
+}
+
 export async function llmAssistant(
   settings: LLMSettings,
   history: { role: "user" | "assistant"; content: string }[],
   prompt: string,
   currentCode: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  engine: AssistantEngine = "arhimed-canvas"
 ): Promise<AssistantReply> {
   if (settings.provider === "offline") throw new Error("Выбран офлайн-ассистент.");
   if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
@@ -162,7 +176,7 @@ export async function llmAssistant(
       model: settings.model,
       temperature: 0.4,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPromptFor(engine) },
         ...history.slice(-6),
         {
           role: "user",

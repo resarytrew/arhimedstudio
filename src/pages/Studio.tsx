@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, Wand2 } from "lucide-react";
+import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, Wand2, X } from "lucide-react";
 import { ChatPanel } from "../components/ChatPanel";
 import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
@@ -68,6 +68,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [recording, setRecording] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
   const playerRef = useRef<PlayerHandle>(null);
 
   useEffect(() => {
@@ -90,6 +91,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   }, []);
 
   const code = active?.code ?? "";
+  const reviewCandidate = reviewCandidateId && active
+    ? activeScene(active).revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
+    : undefined;
+  const displayedCode = reviewCandidate?.source ?? code;
 
   // Canvas stays the default engine, now through EngineAdapterV1 rather than a universal scene format.
   useEffect(() => {
@@ -239,7 +244,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const copyCode = async () => {
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(displayedCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -247,7 +252,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     }
   };
   const downloadPy = () => {
-    const blob = new Blob([code], { type: "text/x-python" });
+    const blob = new Blob([displayedCode], { type: "text/x-python" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `${(timeline?.sceneName ?? "scene").toLowerCase()}.py`;
@@ -296,7 +301,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         thinking={thinking}
         onSend={handleSend}
         onStop={handleStop}
-        onRestore={(candidateId) => {
+        onAcceptCandidate={(candidateId) => {
           if (!candidateId || !active) return;
           const accepted = acceptAiCandidate(active, candidateId);
           if (!accepted) {
@@ -304,9 +309,17 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             return;
           }
           updateProject(active.id, () => accepted.project);
-          showToast("Кандидатная ревизия принята.");
+          setReviewCandidateId(null);
+          restorePanel("preview");
+          restorePanel("code");
+          setMaxed(null);
+          showToast("Кандидатная ревизия принята: запускаю новое превью.");
         }}
-        onShowCode={() => {
+        onReviewCandidate={(candidateId) => {
+          if (!candidateId || !active) return;
+          const candidate = activeScene(active).revisions.find((revision) => revision.id === candidateId && revision.kind === "ai-candidate");
+          if (!candidate) { showToast("Кандидатная ревизия больше недоступна."); return; }
+          setReviewCandidateId(candidate.id);
           restorePanel("code");
           setMaxed(null);
         }}
@@ -383,7 +396,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const codeEl = (
     <Panel
-      title={activeScene(active).engineId === "manimgx-browser" ? "Код ManimGX" : "Код Manim"}
+      title={reviewCandidate ? "Кандидат ИИ" : activeScene(active).engineId === "manimgx-browser" ? "Код ManimGX" : "Код Manim"}
       icon={<Braces size={15} />}
       maximized={maxed === "code"}
       onMaximize={() => setMaxed((m) => (m === "code" ? null : "code"))}
@@ -391,15 +404,35 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       className="h-full"
       actions={
         <>
+          {reviewCandidate && (
+            <>
+              <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 sm:block dark:bg-amber-500/10 dark:text-amber-300">Не применён</span>
+              <button
+                onClick={() => {
+                  if (!active) return;
+                  const accepted = acceptAiCandidate(active, reviewCandidate.id);
+                  if (!accepted) { showToast("Кандидат нельзя применить: исходная ревизия сцены изменилась."); return; }
+                  updateProject(active.id, () => accepted.project);
+                  setReviewCandidateId(null);
+                  restorePanel("preview");
+                  showToast("Кандидатная ревизия принята: запускаю новое превью.");
+                }}
+                className="rounded-lg bg-blue-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-600"
+              >
+                Применить
+              </button>
+              <IconBtn onClick={() => setReviewCandidateId(null)} title="Закрыть кандидата"><X size={14} /></IconBtn>
+            </>
+          )}
           <span
             className={cn(
               "mr-1.5 hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:flex",
-              error
+              error && !reviewCandidate
                 ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300"
                 : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
             )}
           >
-            {error ? (
+            {error && !reviewCandidate ? (
               <>
                 <AlertTriangle size={11} /> строка {error.line}
               </>
@@ -418,7 +451,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         </>
       }
     >
-      <CodeEditor value={code} onChange={setCode} errorLine={error?.line ?? null} />
+          {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
+          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} onChange={setCode} errorLine={reviewCandidate ? null : error?.line ?? null} readOnly={!!reviewCandidate} /></div>
     </Panel>
   );
 

@@ -55,7 +55,7 @@ export class AIOrchestratorV1 {
       const profile = AI_ENGINE_PROFILES[request.engine];
       const reply = request.settings.provider === "offline"
         ? localAssistant(request.prompt, request.source, request.history.length === 0)
-        : await llmAssistant(request.settings, request.history.slice(-6), request.prompt, request.source, controller.signal);
+        : await llmAssistant(request.settings, request.history.slice(-6), request.prompt, request.source, controller.signal, request.engine);
       return { baseSource: request.source, reply, profile };
     } finally {
       this.active.delete(request.projectId);

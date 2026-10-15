@@ -149,6 +149,10 @@ test('offline assistant creates a reviewed candidate revision before applying it
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
   await expect(page.getByText('Кандидатная ревизия сцены')).toBeVisible({timeout:10000});
   await expect(editor).toHaveValue(before);
+  await page.getByRole('button',{name:'Открыть',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Кандидат ИИ'})).toBeVisible();
+  await expect(editor).toHaveValue(/class Pythagoras/);
+  await expect(editor).toHaveAttribute('readonly','');
   await page.getByRole('button',{name:'Принять кандидатную ревизию'}).click();
   await expect(editor).toHaveValue(/class Pythagoras/);
   await expect(page.getByText(/Ошибка в строке/)).toBeHidden();
