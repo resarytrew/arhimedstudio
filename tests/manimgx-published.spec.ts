@@ -17,6 +17,13 @@ test("published Studio renders an explicitly authored ManimGX scene on the isola
   await engine.selectOption("manimgx-browser");
   await page.locator("textarea.code-area").fill(gxScene);
   await expect(page.getByText("ManimGX отрисовал сцену в изолированном runtime.")).toBeVisible({ timeout: 45_000 });
+  const scenes = await page.evaluate(() => {
+    const projects = JSON.parse(localStorage.getItem("arhimed.projects.v2") ?? "[]");
+    return projects[0]?.scenes ?? [];
+  });
+  expect(scenes).toHaveLength(2);
+  expect(scenes[0]).toMatchObject({ engineId: "arhimed-canvas", source: expect.stringContaining("import manimx as m") });
+  expect(scenes[1]).toMatchObject({ engineId: "manimgx-browser", source: gxScene });
   await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("sandbox", /allow-scripts/);
   await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("sandbox", /allow-same-origin/);
 });
