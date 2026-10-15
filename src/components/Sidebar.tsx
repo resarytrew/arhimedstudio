@@ -13,6 +13,7 @@ import {
   Trash2,
   User,
 } from "lucide-react";
+import type { EngineId } from "../engines/contracts";
 import type { Project } from "../lib/store";
 import { cn } from "../utils/cn";
 import { Logo } from "./Logo";
@@ -41,6 +42,8 @@ interface Props {
   onSettings: () => void;
   onHome: () => void;
   onToast: (t: string) => void;
+  engineId: EngineId;
+  onEngineChange: (engineId: "arhimed-canvas" | "manimgx-browser") => void;
 }
 
 export function Sidebar(p: Props) {
@@ -96,6 +99,19 @@ export function Sidebar(p: Props) {
           <Plus size={16} />
         </IconBtn>
       </div>
+
+      <label className="mx-3 mb-2 block">
+        <span className="mb-1 block text-[10.5px] font-medium uppercase tracking-wide text-slate-400">Движок сцены</span>
+        <select
+          aria-label="Движок сцены"
+          value={p.engineId === "manimgx-browser" ? "manimgx-browser" : "arhimed-canvas"}
+          onChange={(event) => p.onEngineChange(event.target.value as "arhimed-canvas" | "manimgx-browser")}
+          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] text-slate-700 outline-none focus:border-blue-400 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200"
+        >
+          <option value="arhimed-canvas">Arhimed Canvas</option>
+          <option value="manimgx-browser">ManimGX 0.1.1 · isolated</option>
+        </select>
+      </label>
 
       <nav className="scroll-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2">
         {p.projects.map((pr) => {

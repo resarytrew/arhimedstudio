@@ -110,14 +110,56 @@ test('real PNG, Python and WebM exports without external network or Python', asy
   }
 });
 
-test('offline assistant and project creation remain available', async ({page})=>{
+test('offline assistant creates a reviewed candidate revision before applying it', async ({page})=>{
   await page.goto('/#/studio');
   await expect(page.getByText('Подготовка превью',{exact:true})).toBeHidden();
   await page.getByRole('button',{name:'Новое видео',exact:true}).click();
+  const editor=page.locator('textarea.code-area');
+  const before=await editor.inputValue();
   await page.getByPlaceholder('Опишите идею для урока…').fill('Теорема Пифагора');
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
-  await expect(page.locator('textarea.code-area')).toHaveValue(/class Pythagoras/);
+  await expect(page.getByText('Кандидатная ревизия сцены')).toBeVisible({timeout:10000});
+  await expect(editor).toHaveValue(before);
+  await page.getByRole('button',{name:'Принять кандидатную ревизию'}).click();
+  await expect(editor).toHaveValue(/class Pythagoras/);
   await expect(page.getByText(/Ошибка в строке/)).toBeHidden();
   await page.reload();
-  await expect(page.locator('textarea.code-area')).toHaveValue(/class Pythagoras/);
+  await expect(editor).toHaveValue(/class Pythagoras/);
+});
+
+test('Stage 2 registry keeps Canvas compatibility and does not persist provider keys', async ({page})=>{
+  const legacy='import manimx as m\nclass Legacy(m.Scene):\n    def construct(self):\n        self.wait(0.1)\n';
+  await page.goto('/');
+  const result=await page.evaluate(async (source)=>{
+    // @ts-expect-error Vite source module for browser-only contract test
+    const store=await import('/src/lib/store.ts');
+    // @ts-expect-error Vite source module for browser-only contract test
+    const {studioEngineRegistry}=await import('/src/engines/registry.ts');
+    const project=store.normalizeProject({id:'legacy',title:'Legacy',code:source,messages:[],updatedAt:1});
+    const canvas=studioEngineRegistry.get('arhimed-canvas');
+    const gx=studioEngineRegistry.get('manimgx-browser');
+    const probe=await gx?.probe();
+    const candidate=store.addAiCandidate(project,source.replace('wait(0.1)','wait(0.2)'),project.scenes[0].currentRevision);
+    const stale=store.updateSceneSource(candidate.project,source.replace('wait(0.1)','wait(0.3)'));
+    return {
+      legacyKey:localStorage.getItem('arhimed.projects.v1'),
+      project,
+      canvas:canvas?.metadata,
+      gxAvailable:probe?.ok && probe.value.available,
+      staleAccepted:store.acceptAiCandidate(stale,candidate.candidate.id),
+    };
+  },legacy);
+  expect(result.project.schemaVersion).toBe(2);
+  expect(result.project.scenes[0]).toMatchObject({engineId:'arhimed-canvas',dialect:'arhimed-manimx-v1',source:legacy});
+  expect(result.project.scenes[0].revisions).toHaveLength(1);
+  expect(result.canvas).toMatchObject({engineId:'arhimed-canvas',adapterVersion:'1'});
+  expect(result.gxAvailable).toBe(false);
+  expect(result.staleAccepted).toBeNull();
+  await page.goto('/#/studio');
+  await page.getByRole('button',{name:'Настройки ИИ'}).click();
+  await page.getByRole('button',{name:'OpenRouter'}).click();
+  await page.getByLabel('API-ключ').fill('sk-live-never-persist');
+  await page.getByRole('button',{name:'Сохранить',exact:true}).click();
+  const serialized=await page.evaluate(()=>JSON.stringify(localStorage));
+  expect(serialized).not.toContain('sk-live-never-persist');
 });

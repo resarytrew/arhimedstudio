@@ -17,14 +17,26 @@ The Canvas parser now reports unclosed `()`, `[]`, and `{}` with a source line i
 
 The source baseline hashes remain in `docs/source-baseline.json`; the original source directory is not modified.
 
-## Stage 1 — IN PROGRESS
+## Stage 1 — ACCEPTED (2026-10-15)
 
-Dedicated experiment repository: `resarytrew/arhimed-runtime-lab`. The Studio codebase will not receive a ManimGX adapter until the public, isolated real-runtime experiment reaches its stated acceptance criteria.
+Dedicated experiment repository: `resarytrew/arhimed-runtime-lab`; dedicated runtime repository: `arhimed-runtime/arhimed-runtime.github.io`.
 
 First configuration result (commit `bbb150e3fd566b7a47fcb65c0af40752f09de445`): **negative in Chrome 155.0.8059.40 and Edge 155.0.4283.45 on Windows 11 / RTX 3070**. A real `manimgx@0.1.1` custom element was executed in an opaque-origin `sandbox="allow-scripts"` iframe. Classic Blob Workers start, but Blob module Workers do not. ManimGX 0.1.1 requires the latter and reports `ManimGX could not start`; no adapter or automatic sandbox weakening has been introduced.
 
-The same verified configuration blocks synthetic parent DOM, localStorage and IndexedDB controls, external and localhost egress (including a Worker probe), and forged/malformed messages. The public lab is `https://resarytrew.github.io/arhimed-runtime-lab/`; its report, fixed runtime hashes and GitHub Pages workflow are in `resarytrew/arhimed-runtime-lab`. Different paths on `resarytrew.github.io` are one origin, so configuration 2 needs a separately administered HTTPS origin before it can be tested; provision of that origin is an open infrastructure prerequisite. Until then, Canvas and prepared video fallbacks remain the only browser publication paths.
+The opaque-origin result remains negative. Configuration 2 is accepted on the separately administered runtime origin `https://arhimed-runtime.github.io/`: real ManimGX 0.1.1/Pyodide/WebGPU, Blob module Worker, dynamic `ValueTracker`/`always_redraw`, stop/restart, MessageChannel validation and synthetic-parent isolation were verified in Chrome and Edge. The runtime assets are locked and hash-verified. The detailed public evidence and limitations are in [the Stage 1 report](https://github.com/arhimed-runtime/arhimed-runtime.github.io/blob/main/docs/stage-1-https-origin-report.md). Canvas remains the default browser publication path; GX uses the accepted cross-origin runtime or a prepared video fallback.
 
-- Stages 2–5: BLOCKED BY PREVIOUS GATES. No universal adapter, new runtime, or project migration has been introduced.
+## Stage 2 — IN PROGRESS
+
+Implemented slice:
+
+- `EngineAdapterV1` contracts, explicit capabilities/events and Studio-owned adapter registry;
+- existing Canvas wrapped as `arhimed-canvas` / `arhimed-manimx-v1`, preserving its native timeline and exports;
+- opt-in `manimgx-browser` adapter using the accepted runtime URL, sandboxed cross-origin iframe and authenticated `MessageChannel`; it never transfers project storage, API keys or arbitrary URLs;
+- new `arhimed.projects.v2` storage with original scene source, engine metadata, immutable source revisions and candidate AI revisions; `arhimed.projects.v1` is preserved and imported without rewriting source;
+- `AIOrchestratorV1`, offline/OpenRouter/OpenAI-compatible provider selection, one request per project, `AbortController` cancellation, normalized provider errors and in-memory API keys;
+- AI code is now a candidate revision. It is applied only after an explicit author action and fails closed if the base revision changed;
+- 15 Canvas educational starter scenes with Chrome/Edge visual baselines.
+
+Current acceptance evidence: build plus Canvas and Stage 2 contract tests pass in Chrome and Edge. Remaining Stage 2 acceptance work: complete the UI-level ManimGX opt-in verification against the newly published Studio URL and record the performance comparison; only then mark this stage accepted and start Stage 3.
 
 The architecture specification describes the target, not completed features. Record evidence and unresolved conditions here before advancing.

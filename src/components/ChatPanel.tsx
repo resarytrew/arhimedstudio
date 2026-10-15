@@ -10,7 +10,7 @@ interface Props {
   thinking: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
-  onRestore: (code: string) => void;
+  onRestore: (candidateRevision: string | undefined) => void;
   onShowCode: () => void;
   maximized: boolean;
   onMaximize: () => void;
@@ -149,7 +149,7 @@ export function ChatPanel(p: Props) {
                           <Code2 size={16} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-medium text-slate-800 dark:text-slate-100">Код сцены обновлён</div>
+                          <div className="text-[13px] font-medium text-slate-800 dark:text-slate-100">Кандидатная ревизия сцены</div>
                           <div className="text-[11.5px] text-slate-500">
                             {m.code.split("\n").length} строк · {m.code.match(/class\s+(\w+)/)?.[1] ?? "Scene"}
                           </div>
@@ -161,8 +161,9 @@ export function ChatPanel(p: Props) {
                           Открыть
                         </button>
                         <button
-                          onClick={() => p.onRestore(m.code!)}
-                          title="Вернуть эту версию"
+                          onClick={() => p.onRestore(m.candidateRevision)}
+                          disabled={!m.candidateRevision}
+                          title="Принять кандидатную ревизию"
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
                         >
                           <RotateCcw size={14} />

@@ -37,15 +37,16 @@ export function SettingsModal({ value, onSave, onClose }: Props) {
 
         <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
           {[
-            { k: false, t: "Офлайн", d: "Встроенные сцены" },
-            { k: true, t: "Языковая модель", d: "OpenAI-совместимый API" },
+            { k: "offline" as const, t: "Офлайн", d: "Встроенные сцены" },
+            { k: "openrouter" as const, t: "OpenRouter", d: "Ваш ключ в памяти" },
+            { k: "openai-compatible" as const, t: "Совместимый API", d: "OpenAI-совместимый API" },
           ].map((o) => (
             <button
-              key={String(o.k)}
-              onClick={() => setV({ ...v, enabled: o.k })}
+              key={o.k}
+              onClick={() => setV({ ...v, provider: o.k, baseUrl: o.k === "openrouter" ? "https://openrouter.ai/api/v1" : v.baseUrl })}
               className={cn(
                 "rounded-lg px-3 py-2 text-left transition",
-                v.enabled === o.k ? "bg-white shadow-sm dark:bg-slate-700" : "opacity-70 hover:opacity-100"
+                v.provider === o.k ? "bg-white shadow-sm dark:bg-slate-700" : "opacity-70 hover:opacity-100"
               )}
             >
               <div className="text-[13px] font-medium text-slate-800 dark:text-white">{o.t}</div>
@@ -54,7 +55,7 @@ export function SettingsModal({ value, onSave, onClose }: Props) {
           ))}
         </div>
 
-        {v.enabled ? (
+        {v.provider !== "offline" ? (
           <div className="mt-5 space-y-3">
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-slate-600 dark:text-slate-300">Адрес API</span>
@@ -75,12 +76,12 @@ export function SettingsModal({ value, onSave, onClose }: Props) {
               />
             </label>
             <p className="text-[11.5px] leading-relaxed text-slate-500">
-              Ключ хранится только в вашем браузере. Подойдёт любой сервис с OpenAI-совместимым API (OpenAI, OpenRouter, локальный сервер и т. д.).
+              Ключ хранится только в памяти этой вкладки. Он не входит в проекты, ревизии, логи, runtime сцен или опубликованные материалы.
             </p>
           </div>
         ) : (
           <p className="mt-5 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400">
-            Офлайн-ассистент работает без интернета и ключей: он знает готовые сцены по физике, математике и информатике и умеет править текущую
+            Офлайн-ассистент работает без интернета и ключей: он знает готовые сцены по физике, математике и информатике и умеет предлагать правки текущей
             анимацию — менять цвета, фон, скорость и заголовки.
           </p>
         )}

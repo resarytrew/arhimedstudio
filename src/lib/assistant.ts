@@ -7,18 +7,23 @@ export interface AssistantReply {
 }
 
 export interface LLMSettings {
-  enabled: boolean;
+  provider: "offline" | "openrouter" | "openai-compatible";
   baseUrl: string;
   apiKey: string;
   model: string;
+  rememberKey: boolean;
 }
 
-export const DEFAULT_LLM: LLMSettings = {
-  enabled: false,
+export interface LLMPreferences extends Omit<LLMSettings, "apiKey"> {}
+
+export const DEFAULT_LLM_PREFERENCES: LLMPreferences = {
+  provider: "offline",
   baseUrl: "https://api.openai.com/v1",
-  apiKey: "",
   model: "gpt-4o-mini",
+  rememberKey: false,
 };
+
+export const DEFAULT_LLM: LLMSettings = { ...DEFAULT_LLM_PREFERENCES, apiKey: "" };
 
 const COLOR_WORDS: [RegExp, string, string][] = [
   [/красн/, "RED", "красный"],
@@ -139,8 +144,12 @@ export async function llmAssistant(
   settings: LLMSettings,
   history: { role: "user" | "assistant"; content: string }[],
   prompt: string,
-  currentCode: string
+  currentCode: string,
+  signal?: AbortSignal
 ): Promise<AssistantReply> {
+  if (settings.provider === "offline") throw new Error("Выбран офлайн-ассистент.");
+  if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
+  if (prompt.length > 8_000 || currentCode.length > 16_384) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
   const url = settings.baseUrl.replace(/\/$/, "") + "/chat/completions";
   const res = await fetch(url, {
     method: "POST",
@@ -148,6 +157,7 @@ export async function llmAssistant(
       "Content-Type": "application/json",
       Authorization: `Bearer ${settings.apiKey}`,
     },
+    signal,
     body: JSON.stringify({
       model: settings.model,
       temperature: 0.4,
@@ -162,11 +172,16 @@ export async function llmAssistant(
     }),
   });
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw new Error("Провайдер отклонил API-ключ.");
+    if (res.status === 402) throw new Error("Недостаточно средств у провайдера.");
+    if (res.status === 429) throw new Error("Провайдер ограничил число запросов. Повторите позже.");
     const t = await res.text();
     throw new Error(`Ошибка API (${res.status}): ${t.slice(0, 200)}`);
   }
-  const data = await res.json();
-  const content: string = data?.choices?.[0]?.message?.content ?? "";
+  let data: unknown;
+  try { data = await res.json(); } catch { throw new Error("Провайдер вернул повреждённый ответ."); }
+  const content: string = (data as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content as string ?? "";
+  if (!content || typeof content !== "string") throw new Error("Провайдер не вернул текст ответа.");
   const m = content.match(/```(?:python|py)?\s*\n([\s\S]*?)```/);
   const text = content.replace(/```[\s\S]*?```/g, "").trim() || "Готово — обновил сцену.";
   return { text, code: m ? m[1].trim() + "\n" : undefined };

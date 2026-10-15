@@ -4,19 +4,28 @@ import { ChatPanel } from "../components/ChatPanel";
 import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
 import { Player, type PlayerHandle } from "../components/Player";
+import { ManimGXPreview } from "../components/ManimGXPreview";
 import { SettingsModal } from "../components/SettingsModal";
 import { Sidebar, type PanelId } from "../components/Sidebar";
-import { runScript, ScriptError, type Timeline } from "../engine/interpreter";
+import type { Timeline } from "../engine/interpreter";
 import { loadEngineFonts } from "../engine/fonts";
-import { llmAssistant, localAssistant, type AssistantReply } from "../lib/assistant";
+import type { LLMSettings } from "../lib/assistant";
+import { aiOrchestrator } from "../ai/orchestrator";
+import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
 import {
   ACTIVE_KEY,
+  acceptAiCandidate,
+  activeScene,
+  addAiCandidate,
+  initialActiveProjectId,
   initialLLM,
   initialProjects,
   LLM_KEY,
   newProject,
   PROJECTS_KEY,
+  setActiveSceneEngine,
   uid,
+  updateSceneSource,
   usePersistent,
   type Message,
   type Project,
@@ -29,12 +38,12 @@ interface Props {
   onHome: () => void;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [projects, setProjects] = usePersistent<Project[]>(PROJECTS_KEY, initialProjects);
-  const [activeId, setActiveId] = usePersistent<string>(ACTIVE_KEY, () => "");
-  const [llm, setLlm] = usePersistent(LLM_KEY, initialLLM);
+  const [activeId, setActiveId] = usePersistent<string>(ACTIVE_KEY, initialActiveProjectId);
+  const [llmPreferences, setLlmPreferences] = usePersistent(LLM_KEY, initialLLM);
+  const [apiKey, setApiKey] = useState("");
+  const llm: LLMSettings = { ...llmPreferences, apiKey };
   const active = projects.find((p) => p.id === activeId) ?? projects[0];
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
@@ -45,7 +54,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const [thinking, setThinking] = useState(false);
   const [typingId, setTypingId] = useState<string | null>(null);
-  const cancelRef = useRef<{ cancelled: boolean } | null>(null);
+  const canvasAdapter = useRef(new ArhimedCanvasAdapterV1());
 
   const [hidden, setHidden] = useState<PanelId[]>([]);
   const [maxed, setMaxed] = useState<PanelId | null>(null);
@@ -82,92 +91,116 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const code = active?.code ?? "";
 
-  // compile (debounced)
+  // Canvas stays the default engine, now through EngineAdapterV1 rather than a universal scene format.
   useEffect(() => {
-    if (!fontsReady) return;
+    if (!fontsReady || !active) return;
+    let current = true;
     const id = setTimeout(() => {
-      try {
-        const tl = runScript(code);
-        setTimeline(tl);
-        setError(null);
-        lastGood.current = code;
-      } catch (e) {
-        if (e instanceof ScriptError) setError({ msg: e.message, line: e.line });
-        else setError({ msg: e instanceof Error ? e.message : String(e), line: 0 });
-      }
+      void (async () => {
+        const scene = activeScene(active);
+        const context = { projectId: active.id, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
+        let diagnostic: { msg: string; line: number } | null = null;
+        const created = await canvasAdapter.current.createSession(context, (event) => {
+          if (event.type === "diagnostic" && event.severity === "error") diagnostic = { msg: event.message, line: event.line ?? 0 };
+        });
+        if (!created.ok) {
+          if (current) setError({ msg: created.message, line: 0 });
+          return;
+        }
+        const loaded = await canvasAdapter.current.loadScene(created.value, context, scene);
+        await created.value.dispose();
+        if (!current) return;
+        if (loaded.ok) {
+          setTimeline(loaded.value);
+          setError(null);
+          lastGood.current = code;
+        } else setError(diagnostic ?? { msg: loaded.message, line: 0 });
+      })();
     }, 350);
-    return () => clearTimeout(id);
-  }, [code, fontsReady]);
+    return () => { current = false; clearTimeout(id); };
+  }, [active, code, fontsReady]);
 
   const showToast = useCallback((t: string) => {
     setToast(t);
     setTimeout(() => setToast((x) => (x === t ? null : x)), 3200);
   }, []);
 
-  const updateActive = useCallback(
-    (fn: (p: Project) => Project) => {
-      setProjects((ps) => ps.map((p) => (p.id === active?.id ? { ...fn(p), updatedAt: Date.now() } : p)));
-    },
-    [active?.id, setProjects]
-  );
+  const updateProject = useCallback((projectId: string, fn: (p: Project) => Project) => {
+    setProjects((ps) => ps.map((p) => (p.id === projectId ? fn(p) : p)));
+  }, [setProjects]);
 
-  const setCode = (c: string) => updateActive((p) => ({ ...p, code: c }));
+  const updateActive = useCallback((fn: (p: Project) => Project) => {
+    if (active) updateProject(active.id, fn);
+  }, [active, updateProject]);
 
-  const pushMessage = (m: Message, patch?: Partial<Project>) =>
-    updateActive((p) => ({ ...p, ...patch, messages: [...p.messages, m] }));
+  const setCode = (c: string) => updateActive((p) => updateSceneSource(p, c));
+
+  const pushMessage = (m: Message) => updateActive((p) => ({ ...p, messages: [...p.messages, m], updatedAt: Date.now() }));
 
   const handleSend = async (text: string) => {
     if (!active) return;
-    const isFirst = active.messages.length === 0;
+    const projectId = active.id;
+    const scene = activeScene(active);
+    const baseRevision = scene.currentRevision;
     const history = active.messages.map((m) => ({ role: m.role, content: m.text }));
-    pushMessage({ id: uid(), role: "user", text, ts: Date.now() });
+    updateProject(projectId, (project) => ({ ...project, messages: [...project.messages, { id: uid(), role: "user", text, ts: Date.now() }], updatedAt: Date.now() }));
     setThinking(true);
-    const token = { cancelled: false };
-    cancelRef.current = token;
-    let reply: AssistantReply & { error?: boolean };
+    let reply: { text: string; code?: string; title?: string; error?: boolean };
     try {
-      if (llm.enabled && llm.apiKey) {
-        reply = await llmAssistant(llm, history, text, code);
-      } else {
-        await sleep(650 + Math.random() * 600);
-        reply = localAssistant(text, code, isFirst);
-        if (llm.enabled && !llm.apiKey) reply.text += "\n\n(API-ключ не указан — ответил встроенный офлайн-ассистент.)";
-      }
+      const result = await aiOrchestrator.generate({
+        projectId,
+        engine: scene.engineId === "manimgx-browser" ? "manimgx-browser" : "arhimed-canvas",
+        settings: llm,
+        history,
+        prompt: text,
+        source: scene.source,
+      });
+      reply = result.reply;
     } catch (e) {
-      reply = { text: e instanceof Error ? e.message : "Не удалось получить ответ ассистента.", error: true };
+      reply = { text: e instanceof DOMException && e.name === "AbortError" ? "Генерация отменена." : e instanceof Error ? e.message : "Не удалось получить ответ ассистента.", error: true };
     }
-    if (token.cancelled) return;
-    const msg: Message = { id: uid(), role: "assistant", text: reply.text, code: reply.code, ts: Date.now(), error: reply.error };
-    const patch: Partial<Project> = {};
-    if (reply.code) patch.code = reply.code;
-    if (reply.title && (active.title === "Новое видео" || active.title === "Пример видео")) patch.title = reply.title;
-    pushMessage(msg, patch);
+    const messageId = uid();
+    updateProject(projectId, (project) => {
+      let next = project;
+      let candidateRevision: string | undefined;
+      if (reply.code && !reply.error) {
+        const created = addAiCandidate(project, reply.code, baseRevision);
+        next = created.project;
+        candidateRevision = created.candidate.id;
+      }
+      const message: Message = { id: messageId, role: "assistant", text: reply.text, code: reply.code, baseRevision, candidateRevision, ts: Date.now(), error: reply.error };
+      return {
+        ...next,
+        title: reply.title && (next.title === "Новое видео" || next.title === "Пример видео") ? reply.title : next.title,
+        messages: [...next.messages, message],
+        updatedAt: Date.now(),
+      };
+    });
     setThinking(false);
-    setTypingId(msg.id);
+    setTypingId(messageId);
     if (hidden.includes("preview")) setHidden((h) => h.filter((x) => x !== "preview"));
   };
 
   const handleStop = () => {
-    if (cancelRef.current) cancelRef.current.cancelled = true;
+    if (active) aiOrchestrator.cancel(active.id);
     setThinking(false);
     pushMessage({ id: uid(), role: "assistant", text: "Остановлено.", ts: Date.now() });
   };
 
   const fixError = () => {
     if (!error) return;
-    if (llm.enabled && llm.apiKey) {
+    if (llm.provider !== "offline" && llm.apiKey) {
       handleSend(`Исправь ошибку в коде (строка ${error.line}): ${error.msg}`);
     } else if (lastGood.current && lastGood.current !== code) {
       const good = lastGood.current;
+      setCode(good);
       pushMessage(
         {
           id: uid(),
           role: "assistant",
           text: `В строке ${error.line} ошибка: «${error.msg}». Вернул код к последней рабочей версии — превью снова работает.`,
-          code: good,
           ts: Date.now(),
-        },
-        { code: good }
+        }
       );
     } else showToast("Проверьте строку " + error.line);
   };
@@ -253,7 +286,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     window.addEventListener("pointerup", up);
   };
 
-  const modeLabel = llm.enabled && llm.apiKey ? `ИИ: ${llm.model}` : "Офлайн-ассистент";
+  const modeLabel = llm.provider === "offline" ? "Офлайн-ассистент" : `ИИ: ${llm.model}`;
 
   const show = (id: PanelId) => !hidden.includes(id) && (!maxed || maxed === id);
 
@@ -263,9 +296,15 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         thinking={thinking}
         onSend={handleSend}
         onStop={handleStop}
-        onRestore={(c) => {
-          setCode(c);
-          showToast("Версия кода восстановлена");
+        onRestore={(candidateId) => {
+          if (!candidateId || !active) return;
+          const accepted = acceptAiCandidate(active, candidateId);
+          if (!accepted) {
+            showToast("Кандидат нельзя применить: исходная ревизия сцены изменилась.");
+            return;
+          }
+          updateProject(active.id, () => accepted.project);
+          showToast("Кандидатная ревизия принята.");
         }}
         onShowCode={() => {
           restorePanel("code");
@@ -290,10 +329,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       onClose={() => togglePanel("preview")}
       actions={
         <>
-          <IconBtn onClick={() => playerRef.current?.snapshot(`${active?.title ?? "frame"}.png`)} title="Сохранить кадр (PNG)">
+          <IconBtn onClick={() => playerRef.current?.snapshot(`${active?.title ?? "frame"}.png`)} title="Сохранить кадр (PNG)" disabled={activeScene(active).engineId !== "arhimed-canvas"}>
             <Camera size={14} />
           </IconBtn>
-          <IconBtn onClick={doRecord} title="Скачать видео (WebM)" disabled={!timeline || recording !== null}>
+          <IconBtn onClick={doRecord} title="Скачать видео (WebM)" disabled={activeScene(active).engineId !== "arhimed-canvas" || !timeline || recording !== null}>
             <Download size={14} />
           </IconBtn>
         </>
@@ -301,8 +340,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       className="h-full"
       bodyClassName="bg-black"
     >
-      <Player ref={playerRef} timeline={timeline} />
-      {booting && (
+      {activeScene(active).engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={activeScene(active)} /> : <Player ref={playerRef} timeline={timeline} />}
+      {activeScene(active).engineId === "arhimed-canvas" && booting && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
           <div className="space-y-2.5 text-[12.5px]">
             <div className="mb-3 text-[10.5px] font-medium uppercase tracking-[0.18em] text-slate-500">Подготовка превью</div>
@@ -314,7 +353,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           </div>
         </div>
       )}
-      {error && !booting && (
+      {activeScene(active).engineId === "arhimed-canvas" && error && !booting && (
         <div className="fade-up absolute inset-x-3 top-3 flex items-start gap-3 rounded-xl bg-red-50/95 px-3.5 py-2.5 text-[12.5px] text-red-700 shadow-lg ring-1 ring-red-200 backdrop-blur dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
@@ -344,7 +383,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const codeEl = (
     <Panel
-      title="Код Manim"
+      title={activeScene(active).engineId === "manimgx-browser" ? "Код ManimGX" : "Код Manim"}
       icon={<Braces size={15} />}
       maximized={maxed === "code"}
       onMaximize={() => setMaxed((m) => (m === "code" ? null : "code"))}
@@ -407,6 +446,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         onSettings={() => setSettings(true)}
         onHome={onHome}
         onToast={showToast}
+        engineId={activeScene(active).engineId}
+        onEngineChange={(engineId) => updateActive((project) => setActiveSceneEngine(project, engineId))}
       />
 
       <main ref={mainRef} className="flex min-w-0 flex-1">
@@ -450,9 +491,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           value={llm}
           onClose={() => setSettings(false)}
           onSave={(v) => {
-            setLlm(v);
+            setLlmPreferences({ provider: v.provider, baseUrl: v.baseUrl, model: v.model, rememberKey: v.rememberKey });
+            setApiKey(v.apiKey);
             setSettings(false);
-            showToast(v.enabled && v.apiKey ? `Подключена модель ${v.model}` : "Включён офлайн-ассистент");
+            showToast(v.provider !== "offline" && v.apiKey ? `Подключена модель ${v.model}` : "Включён офлайн-ассистент");
           }}
         />
       )}
