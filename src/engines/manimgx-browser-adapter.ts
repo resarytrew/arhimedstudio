@@ -63,7 +63,11 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     const iframe = document.createElement("iframe");
     iframe.src = this.runtimeUrl;
     iframe.sandbox.add("allow-scripts", "allow-same-origin");
-    iframe.allow = "webgpu";
+    // The runtime remains cross-origin and sandboxed.  The explicit Permissions Policy and
+    // boolean allowFullscreen only delegate the user-initiated fullscreen capability to the
+    // embedded player; they do not grant it access to Studio's origin or storage.
+    iframe.allow = "webgpu; fullscreen";
+    iframe.allowFullscreen = true;
     iframe.referrerPolicy = "no-referrer";
     iframe.setAttribute("aria-label", "Isolated ManimGX runtime");
     iframe.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0";

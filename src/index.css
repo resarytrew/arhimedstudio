@@ -85,6 +85,12 @@ body {
 .code-area {
   caret-color: #2563eb;
 }
+
+.preview-surface:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
 .tab-size-4 {
   tab-size: 4;
 }

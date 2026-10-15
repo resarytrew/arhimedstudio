@@ -139,6 +139,15 @@ test('real PNG, Python and WebM exports without external network or Python', asy
   }
 });
 
+test('preview uses the browser Fullscreen API and leaves it cleanly', async ({ page }) => {
+  await page.goto('/#/studio');
+  await expect(page.getByText('Подготовка превью', { exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Во весь экран', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement?.getAttribute('data-testid') ?? null)).toBe('preview-surface');
+  await page.evaluate(() => document.exitFullscreen());
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
+});
+
 test('offline assistant creates a reviewed candidate revision before applying it', async ({page})=>{
   await page.goto('/#/studio');
   await expect(page.getByText('Подготовка превью',{exact:true})).toBeHidden();

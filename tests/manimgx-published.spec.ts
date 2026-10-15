@@ -26,4 +26,11 @@ test("published Studio renders an explicitly authored ManimGX scene on the isola
   expect(scenes[1]).toMatchObject({ engineId: "manimgx-browser", source: gxScene });
   await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("sandbox", /allow-scripts/);
   await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("sandbox", /allow-same-origin/);
+  await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("allow", /fullscreen/);
+  await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveJSProperty("allowFullscreen", true);
+  const runtime = page.getByLabel("Isolated ManimGX runtime").contentFrame();
+  await expect.poll(async () => runtime.locator("manimgx-player").evaluate((player) => {
+    const height = player.getBoundingClientRect().height;
+    return Math.round(height) === Math.round(window.innerHeight);
+  })).toBe(true);
 });

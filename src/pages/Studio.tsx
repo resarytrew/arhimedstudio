@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, Wand2, X } from "lucide-react";
+import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, Maximize2, Minimize2, Wand2, X } from "lucide-react";
 import { ChatPanel } from "../components/ChatPanel";
 import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
@@ -70,6 +70,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
   const playerRef = useRef<PlayerHandle>(null);
+  const previewSurfaceRef = useRef<HTMLDivElement>(null);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
 
   useEffect(() => {
     if (!projects.length) {
@@ -129,6 +131,30 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     setToast(t);
     setTimeout(() => setToast((x) => (x === t ? null : x)), 3200);
   }, []);
+
+  useEffect(() => {
+    const syncFullscreenState = () => setPreviewFullscreen(document.fullscreenElement === previewSurfaceRef.current);
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreenState);
+  }, []);
+
+  const togglePreviewFullscreen = async () => {
+    const surface = previewSurfaceRef.current;
+    if (!surface) return;
+    try {
+      if (document.fullscreenElement === surface) await document.exitFullscreen();
+      else {
+        if (!document.fullscreenEnabled) {
+          showToast("Браузер не разрешает полноэкранный режим.");
+          return;
+        }
+        if (document.fullscreenElement) await document.exitFullscreen();
+        await surface.requestFullscreen();
+      }
+    } catch {
+      showToast("Не удалось включить полноэкранный режим.");
+    }
+  };
 
   const updateProject = useCallback((projectId: string, fn: (p: Project) => Project) => {
     setProjects((ps) => ps.map((p) => (p.id === projectId ? fn(p) : p)));
@@ -342,6 +368,12 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       onClose={() => togglePanel("preview")}
       actions={
         <>
+          <IconBtn
+            onClick={() => void togglePreviewFullscreen()}
+            title={previewFullscreen ? "Выйти из полноэкранного режима" : "Во весь экран"}
+          >
+            {previewFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </IconBtn>
           <IconBtn onClick={() => playerRef.current?.snapshot(`${active?.title ?? "frame"}.png`)} title="Сохранить кадр (PNG)" disabled={activeScene(active).engineId !== "arhimed-canvas"}>
             <Camera size={14} />
           </IconBtn>
@@ -353,44 +385,46 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       className="h-full"
       bodyClassName="bg-black"
     >
-      {activeScene(active).engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={activeScene(active)} /> : <Player ref={playerRef} timeline={timeline} />}
-      {activeScene(active).engineId === "arhimed-canvas" && booting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
-          <div className="space-y-2.5 text-[12.5px]">
-            <div className="mb-3 text-[10.5px] font-medium uppercase tracking-[0.18em] text-slate-500">Подготовка превью</div>
-            {["Загрузка движка анимаций", "Подключение шрифтов и формул", "Прогрев рендерера"].map((t, i) => (
-              <div key={t} className="fade-up flex items-center gap-2" style={{ animationDelay: `${i * 250}ms` }}>
-                <Loader2 size={13} className="animate-spin text-blue-400" /> {t}
-              </div>
-            ))}
+      <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative h-full bg-black">
+        {activeScene(active).engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={activeScene(active)} /> : <Player ref={playerRef} timeline={timeline} />}
+        {activeScene(active).engineId === "arhimed-canvas" && booting && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
+            <div className="space-y-2.5 text-[12.5px]">
+              <div className="mb-3 text-[10.5px] font-medium uppercase tracking-[0.18em] text-slate-500">Подготовка превью</div>
+              {["Загрузка движка анимаций", "Подключение шрифтов и формул", "Прогрев рендерера"].map((t, i) => (
+                <div key={t} className="fade-up flex items-center gap-2" style={{ animationDelay: `${i * 250}ms` }}>
+                  <Loader2 size={13} className="animate-spin text-blue-400" /> {t}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-      {activeScene(active).engineId === "arhimed-canvas" && error && !booting && (
-        <div className="fade-up absolute inset-x-3 top-3 flex items-start gap-3 rounded-xl bg-red-50/95 px-3.5 py-2.5 text-[12.5px] text-red-700 shadow-lg ring-1 ring-red-200 backdrop-blur dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30">
-          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium">Ошибка{error.line ? ` в строке ${error.line}` : ""}</div>
-            <div className="truncate opacity-80">{error.msg}</div>
+        )}
+        {activeScene(active).engineId === "arhimed-canvas" && error && !booting && (
+          <div className="fade-up absolute inset-x-3 top-3 flex items-start gap-3 rounded-xl bg-red-50/95 px-3.5 py-2.5 text-[12.5px] text-red-700 shadow-lg ring-1 ring-red-200 backdrop-blur dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">Ошибка{error.line ? ` в строке ${error.line}` : ""}</div>
+              <div className="truncate opacity-80">{error.msg}</div>
+            </div>
+            <button
+              onClick={fixError}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
+            >
+              <Wand2 size={13} /> Исправить
+            </button>
           </div>
-          <button
-            onClick={fixError}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
-          >
-            <Wand2 size={13} /> Исправить
-          </button>
-        </div>
-      )}
-      {recording !== null && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/55 text-white backdrop-blur-[2px]">
-          <div className="flex items-center gap-2 text-[13px] font-medium">
-            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" /> Запись видео… {Math.round(recording * 100)}%
+        )}
+        {recording !== null && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/55 text-white backdrop-blur-[2px]">
+            <div className="flex items-center gap-2 text-[13px] font-medium">
+              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" /> Запись видео… {Math.round(recording * 100)}%
+            </div>
+            <div className="mt-3 h-1 w-48 overflow-hidden rounded-full bg-white/20">
+              <div className="h-full bg-white transition-all" style={{ width: `${recording * 100}%` }} />
+            </div>
           </div>
-          <div className="mt-3 h-1 w-48 overflow-hidden rounded-full bg-white/20">
-            <div className="h-full bg-white transition-all" style={{ width: `${recording * 100}%` }} />
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </Panel>
   );
 
