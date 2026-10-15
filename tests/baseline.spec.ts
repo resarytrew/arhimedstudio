@@ -268,3 +268,16 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
   expect(result.cramped.status).toBe('rejected');
   expect(result.canvasFallback).toBeGreaterThanOrEqual(12);
 });
+
+test('AI response parser recovers an escaped Python fence as a candidate revision', async ({ page }) => {
+  await page.goto('/');
+  const parsed = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { parseAssistantContent } = await import('/src/lib/assistant.ts');
+    const escapedFence = String.fromCharCode(92) + '```';
+    return parseAssistantContent(`Сцена готова.\n\n${escapedFence}python\nimport manimgx as m\n\nclass Proof(m.Scene):\n    def construct(self):\n        self.wait(1)\n${escapedFence}`);
+  });
+  expect(parsed.text).toBe('Сцена готова.');
+  expect(parsed.code).toContain('import manimgx as m');
+  expect(parsed.code).toContain('class Proof(m.Scene):');
+});

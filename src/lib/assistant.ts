@@ -26,6 +26,31 @@ export const DEFAULT_LLM_PREFERENCES: LLMPreferences = {
 
 export const DEFAULT_LLM: LLMSettings = { ...DEFAULT_LLM_PREFERENCES, apiKey: "" };
 
+/**
+ * Providers occasionally escape Markdown fences (\\`\\`\\`) even though the requested
+ * response is otherwise valid. Keep prose and source separate so a scene is always reviewed
+ * through the candidate-revision flow rather than being dumped into chat.
+ */
+export function parseAssistantContent(content: string): AssistantReply {
+  const normalized = content.replace(/\\`/g, "`").replace(/\r\n/g, "\n");
+  const fenced = /```(?:python|py)?[ \t]*\n([\s\S]*?)```/i.exec(normalized);
+  if (fenced) {
+    const text = `${normalized.slice(0, fenced.index)}${normalized.slice((fenced.index ?? 0) + fenced[0].length)}`.trim() || "Готово — подготовил кандидатную ревизию.";
+    return { text, code: fenced[1].trim() + "\n" };
+  }
+
+  // Last-resort recovery for providers that omit fences but do return a complete scene.
+  const sourceStart = normalized.search(/^\s*import\s+(?:manimx|manimgx)\s+as\s+m\b/m);
+  if (sourceStart >= 0) {
+    const source = normalized.slice(sourceStart).trim();
+    if (/class\s+\w+\s*\(\s*m\.Scene\s*\)\s*:/.test(source)) {
+      const text = normalized.slice(0, sourceStart).trim() || "Готово — подготовил кандидатную ревизию.";
+      return { text, code: source + "\n" };
+    }
+  }
+  return { text: normalized.trim() || "Провайдер не вернул содержательный ответ." };
+}
+
 const COLOR_WORDS: [RegExp, string, string][] = [
   [/красн/, "RED", "красный"],
   [/син(ий|им|ее|яя|ей|ие|его|юю|ими)(?![а-я])|голуб/, "BLUE", "синий"],
@@ -279,7 +304,5 @@ export async function llmAssistant(
   try { data = await res.json(); } catch { throw new Error("Провайдер вернул повреждённый ответ."); }
   const content: string = (data as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content as string ?? "";
   if (!content || typeof content !== "string") throw new Error("Провайдер не вернул текст ответа.");
-  const m = content.match(/```(?:python|py)?\s*\n([\s\S]*?)```/);
-  const text = content.replace(/```[\s\S]*?```/g, "").trim() || "Готово — обновил сцену.";
-  return { text, code: m ? m[1].trim() + "\n" : undefined };
+  return parseAssistantContent(content);
 }
