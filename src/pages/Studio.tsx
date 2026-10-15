@@ -10,6 +10,7 @@ import { Sidebar, type PanelId } from "../components/Sidebar";
 import type { Timeline } from "../engine/interpreter";
 import { loadEngineFonts } from "../engine/fonts";
 import type { LLMSettings } from "../lib/assistant";
+import { WELCOME_CODE } from "../lib/templates";
 import { aiOrchestrator } from "../ai/orchestrator";
 import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
 import {
@@ -75,7 +76,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   useEffect(() => {
     if (!projects.length) {
-      const p = newProject("Пример видео");
+      const p = newProject("Пример видео", WELCOME_CODE);
       setProjects([p]);
       setActiveId(p.id);
     } else if (!projects.some((p) => p.id === activeId)) setActiveId(projects[0].id);
@@ -92,19 +93,28 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     });
   }, []);
 
+  const scene = activeScene(active);
   const code = active?.code ?? "";
+  const hasSceneSource = scene.source.trim().length > 0;
+  const visibleTimeline = scene.engineId === "arhimed-canvas" && hasSceneSource ? timeline : null;
+  const visibleError = scene.engineId === "arhimed-canvas" && hasSceneSource ? error : null;
   const reviewCandidate = reviewCandidateId && active
-    ? activeScene(active).revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
+    ? scene.revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
     : undefined;
   const displayedCode = reviewCandidate?.source ?? code;
 
   // Canvas stays the default engine, now through EngineAdapterV1 rather than a universal scene format.
   useEffect(() => {
     if (!fontsReady || !active) return;
+    const scene = activeScene(active);
+    // A project switch must not leak the previous scene's frame or diagnostics.
+    setTimeline(null);
+    setError(null);
+    lastGood.current = "";
+    if (!scene.source.trim()) return;
     let current = true;
     const id = setTimeout(() => {
       void (async () => {
-        const scene = activeScene(active);
         const context = { projectId: active.id, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
         let diagnostic: { msg: string; line: number } | null = null;
         const created = await canvasAdapter.current.createSession(context, (event) => {
@@ -245,7 +255,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const deleteVideo = (id: string) => {
     setProjects((ps) => {
       const rest = ps.filter((p) => p.id !== id);
-      return rest.length ? rest : [newProject("Пример видео")];
+      return rest.length ? rest : [newProject("Пример видео", WELCOME_CODE)];
     });
   };
 
@@ -256,7 +266,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const restorePanel = (id: PanelId) => setHidden((h) => h.filter((x) => x !== id));
 
   const doRecord = async () => {
-    if (!playerRef.current || !timeline || recording !== null) return;
+    if (!playerRef.current || !visibleTimeline || recording !== null) return;
     try {
       setRecording(0);
       await playerRef.current.record(`${active.title || "arhimed"}.webm`, (p) => setRecording(p));
@@ -374,10 +384,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           >
             {previewFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </IconBtn>
-          <IconBtn onClick={() => playerRef.current?.snapshot(`${active?.title ?? "frame"}.png`)} title="Сохранить кадр (PNG)" disabled={activeScene(active).engineId !== "arhimed-canvas"}>
+          <IconBtn onClick={() => playerRef.current?.snapshot(`${active?.title ?? "frame"}.png`)} title="Сохранить кадр (PNG)" disabled={!visibleTimeline}>
             <Camera size={14} />
           </IconBtn>
-          <IconBtn onClick={doRecord} title="Скачать видео (WebM)" disabled={activeScene(active).engineId !== "arhimed-canvas" || !timeline || recording !== null}>
+          <IconBtn onClick={doRecord} title="Скачать видео (WebM)" disabled={!visibleTimeline || recording !== null}>
             <Download size={14} />
           </IconBtn>
         </>
@@ -386,8 +396,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       bodyClassName="bg-black"
     >
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative h-full bg-black">
-        {activeScene(active).engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={activeScene(active)} /> : <Player ref={playerRef} timeline={timeline} />}
-        {activeScene(active).engineId === "arhimed-canvas" && booting && (
+        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={scene} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
+        {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
               <div className="mb-3 text-[10.5px] font-medium uppercase tracking-[0.18em] text-slate-500">Подготовка превью</div>
@@ -399,12 +409,12 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             </div>
           </div>
         )}
-        {activeScene(active).engineId === "arhimed-canvas" && error && !booting && (
+        {visibleError && !booting && (
           <div className="fade-up absolute inset-x-3 top-3 flex items-start gap-3 rounded-xl bg-red-50/95 px-3.5 py-2.5 text-[12.5px] text-red-700 shadow-lg ring-1 ring-red-200 backdrop-blur dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="font-medium">Ошибка{error.line ? ` в строке ${error.line}` : ""}</div>
-              <div className="truncate opacity-80">{error.msg}</div>
+              <div className="font-medium">Ошибка{visibleError.line ? ` в строке ${visibleError.line}` : ""}</div>
+              <div className="truncate opacity-80">{visibleError.msg}</div>
             </div>
             <button
               onClick={fixError}
@@ -430,7 +440,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const codeEl = (
     <Panel
-      title={reviewCandidate ? "Кандидат ИИ" : activeScene(active).engineId === "manimgx-browser" ? "Код ManimGX" : "Код Manim"}
+      title={reviewCandidate ? "Кандидат ИИ" : scene.engineId === "manimgx-browser" ? "Код ManimGX" : "Код Manim"}
       icon={<Braces size={15} />}
       maximized={maxed === "code"}
       onMaximize={() => setMaxed((m) => (m === "code" ? null : "code"))}
@@ -458,24 +468,24 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
               <IconBtn onClick={() => setReviewCandidateId(null)} title="Закрыть кандидата"><X size={14} /></IconBtn>
             </>
           )}
-          <span
+          {hasSceneSource && scene.engineId === "arhimed-canvas" && <span
             className={cn(
               "mr-1.5 hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:flex",
-              error && !reviewCandidate
+              visibleError && !reviewCandidate
                 ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300"
                 : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
             )}
           >
-            {error && !reviewCandidate ? (
+            {visibleError && !reviewCandidate ? (
               <>
-                <AlertTriangle size={11} /> строка {error.line}
+                <AlertTriangle size={11} /> строка {visibleError.line}
               </>
             ) : (
               <>
-                <CircleCheck size={11} /> {timeline ? `${timeline.duration.toFixed(1)} с` : "…"}
+                <CircleCheck size={11} /> {visibleTimeline ? `${visibleTimeline.duration.toFixed(1)} с` : "…"}
               </>
             )}
-          </span>
+          </span>}
           <IconBtn onClick={copyCode} title="Копировать код">
             {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
           </IconBtn>
@@ -486,7 +496,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       }
     >
           {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
-          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} onChange={setCode} errorLine={reviewCandidate ? null : error?.line ?? null} readOnly={!!reviewCandidate} /></div>
+          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
     </Panel>
   );
 
@@ -514,7 +524,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         onSettings={() => setSettings(true)}
         onHome={onHome}
         onToast={showToast}
-        engineId={activeScene(active).engineId}
+        engineId={scene.engineId}
         onEngineChange={(engineId) => updateActive((project) => setActiveSceneEngine(project, engineId))}
       />
 

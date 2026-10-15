@@ -148,6 +148,23 @@ test('preview uses the browser Fullscreen API and leaves it cleanly', async ({ p
   await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
 });
 
+test('a new project has empty code and preview instead of the previous project state', async ({ page }) => {
+  await page.goto('/#/studio');
+  await expect(page.getByText('Подготовка превью', { exact: true })).toBeHidden();
+  const source = 'import manimx as m\nclass Previous(m.Scene):\n    def construct(self):\n        self.play(m.Create(m.Circle()), run_time=0.2)\n';
+  await page.locator('textarea.code-area').fill(source);
+  await expect(page.getByRole('slider')).toHaveAttribute('max', '0.2');
+  await page.getByRole('button', { name: 'Новое видео', exact: true }).click();
+  await expect(page.locator('textarea.code-area')).toHaveValue('');
+  await expect(page.getByLabel('Пустое превью')).toBeVisible();
+  await expect(page.getByText(/Ошибка в строке/)).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Сохранить кадр (PNG)', exact: true })).toBeDisabled();
+  await page.getByLabel('Движок сцены').selectOption('manimgx-browser');
+  await expect(page.locator('textarea.code-area')).toHaveValue('');
+  await expect(page.getByLabel('Пустое превью')).toBeVisible();
+  await expect(page.getByLabel('Isolated ManimGX runtime')).toHaveCount(0);
+});
+
 test('offline assistant creates a reviewed candidate revision before applying it', async ({page})=>{
   await page.goto('/#/studio');
   await expect(page.getByText('Подготовка превью',{exact:true})).toBeHidden();

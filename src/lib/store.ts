@@ -74,7 +74,8 @@ function initialScene(source: string, now = Date.now()): Scene {
   };
 }
 
-export function newProject(title = "Новое видео", code = WELCOME_CODE): Project {
+/** A user-created project starts without a scene. The separately seeded demo keeps WELCOME_CODE. */
+export function newProject(title = "Новое видео", code = ""): Project {
   const scene = initialScene(code);
   return { schemaVersion: 2, id: uid(), title, code, messages: [], scenes: [scene], activeSceneId: scene.id, updatedAt: Date.now() };
 }
@@ -175,7 +176,7 @@ export const LLM_KEY = "arhimed.llm.v2";
 
 export function initialProjects(): Project[] {
   const legacy = load<LegacyProject[]>(LEGACY_PROJECTS_KEY, []);
-  return legacy.length ? legacy.map(normalizeProject) : [newProject("Пример видео")];
+  return legacy.length ? legacy.map(normalizeProject) : [newProject("Пример видео", WELCOME_CODE)];
 }
 
 export function initialActiveProjectId(): string {

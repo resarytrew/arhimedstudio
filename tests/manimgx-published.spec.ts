@@ -16,7 +16,11 @@ test("published Studio renders an explicitly authored ManimGX scene on the isola
   const engine = page.getByLabel("Движок сцены");
   await engine.selectOption("manimgx-browser");
   await page.locator("textarea.code-area").fill(gxScene);
-  await expect(page.getByText("ManimGX отрисовал сцену в изолированном runtime.")).toBeVisible({ timeout: 45_000 });
+  const runtimeFrame = page.getByLabel("Isolated ManimGX runtime");
+  await expect(runtimeFrame).toBeVisible({ timeout: 45_000 });
+  const runtime = runtimeFrame.contentFrame();
+  await expect.poll(async () => runtime.locator("manimgx-player").evaluate((player) => player.shadowRoot?.querySelector("canvas")?.width ?? 0)).toBeGreaterThan(0);
+  await expect(page.getByText("ManimGX отрисовал сцену в изолированном runtime.")).toBeHidden();
   const scenes = await page.evaluate(() => {
     const projects = JSON.parse(localStorage.getItem("arhimed.projects.v2") ?? "[]");
     return projects[0]?.scenes ?? [];
@@ -24,11 +28,10 @@ test("published Studio renders an explicitly authored ManimGX scene on the isola
   expect(scenes).toHaveLength(2);
   expect(scenes[0]).toMatchObject({ engineId: "arhimed-canvas", source: expect.stringContaining("import manimx as m") });
   expect(scenes[1]).toMatchObject({ engineId: "manimgx-browser", source: gxScene });
-  await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("sandbox", /allow-scripts/);
-  await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("sandbox", /allow-same-origin/);
-  await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveAttribute("allow", /fullscreen/);
-  await expect(page.getByLabel("Isolated ManimGX runtime")).toHaveJSProperty("allowFullscreen", true);
-  const runtime = page.getByLabel("Isolated ManimGX runtime").contentFrame();
+  await expect(runtimeFrame).toHaveAttribute("sandbox", /allow-scripts/);
+  await expect(runtimeFrame).toHaveAttribute("sandbox", /allow-same-origin/);
+  await expect(runtimeFrame).toHaveAttribute("allow", /fullscreen/);
+  await expect(runtimeFrame).toHaveJSProperty("allowFullscreen", true);
   await expect.poll(async () => runtime.locator("manimgx-player").evaluate((player) => {
     const height = player.getBoundingClientRect().height;
     return Math.round(height) === Math.round(window.innerHeight);

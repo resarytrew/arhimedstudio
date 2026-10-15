@@ -12,18 +12,19 @@ interface Props {
 /** The Python runtime remains in a cross-origin sandbox and never receives Studio storage or credentials. */
 export function ManimGXPreview({ projectId, scene }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const [message, setMessage] = useState("Подключение изолированного ManimGX runtime…");
+  const [message, setMessage] = useState<string | null>("Подключение изолированного ManimGX runtime…");
 
   useEffect(() => {
     let cancelled = false;
     let session: ManimGXBrowserSessionV1 | undefined;
+    setMessage("Подключение изолированного ManimGX runtime…");
     const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
     const adapter = new ManimGXBrowserAdapterV1(true);
     void (async () => {
       const created = await adapter.createSession(context, (event) => {
         if (cancelled) return;
         if (event.type === "diagnostic") setMessage(event.message);
-        if (event.type === "result" && event.result === "rendered") setMessage("ManimGX отрисовал сцену в изолированном runtime.");
+        if (event.type === "result" && event.result === "rendered") setMessage(null);
       });
       if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
       session = created.value;
@@ -39,9 +40,9 @@ export function ManimGXPreview({ projectId, scene }: Props) {
   return (
     <div className="relative h-full bg-black">
       <div ref={host} className="h-full" />
-      <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-lg bg-slate-950/75 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur">
+      {message && <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-lg bg-slate-950/75 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur">
         <Loader2 size={12} className="animate-spin text-cyan-300" /> {message}
-      </div>
+      </div>}
     </div>
   );
 }
