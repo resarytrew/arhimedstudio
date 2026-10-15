@@ -114,10 +114,16 @@ export function updateSceneSource(project: Project, source: string): Project {
 
 export function setActiveSceneEngine(project: Project, engineId: Extract<EngineId, "arhimed-canvas" | "manimgx-browser">): Project {
   const scene = activeScene(project);
+  if (scene.engineId === engineId) return project;
+  // Changing runtimes is never an implicit source conversion. Keep the existing scene and
+  // start a new scene with an independent initial revision; the author can then write GX code
+  // or invoke a future, explicitly reviewed conversion command.
+  const now = Date.now();
+  const revisionId = uid();
   const nextScene: Scene = engineId === "arhimed-canvas"
-    ? { ...scene, engineId, engineVersion: "canvas-interpreter-v1", language: "python", dialect: "arhimed-manimx-v1", entrypoint: "Scene.construct" }
-    : { ...scene, engineId, engineVersion: "manimgx-0.1.1-pyodide-v314.0.7", language: "python", dialect: "manimgx-0.1.1", entrypoint: "Scene.construct" };
-  return { ...project, scenes: project.scenes.map((value) => (value.id === scene.id ? nextScene : value)), updatedAt: Date.now() };
+    ? { ...scene, id: uid(), engineId, engineVersion: "canvas-interpreter-v1", language: "python", dialect: "arhimed-manimx-v1", entrypoint: "Scene.construct", currentRevision: revisionId, revisions: [{ id: revisionId, number: 1, kind: "initial", source: scene.source, createdAt: now }] }
+    : { ...scene, id: uid(), engineId, engineVersion: "manimgx-0.1.1-pyodide-v314.0.7", language: "python", dialect: "manimgx-0.1.1", entrypoint: "Scene.construct", currentRevision: revisionId, revisions: [{ id: revisionId, number: 1, kind: "initial", source: scene.source, createdAt: now }] };
+  return { ...project, code: nextScene.source, scenes: [...project.scenes, nextScene], activeSceneId: nextScene.id, updatedAt: now };
 }
 
 export function addAiCandidate(project: Project, source: string, baseRevision: string): { project: Project; candidate: SceneRevision } {

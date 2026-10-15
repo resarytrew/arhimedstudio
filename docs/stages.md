@@ -25,7 +25,7 @@ First configuration result (commit `bbb150e3fd566b7a47fcb65c0af40752f09de445`): 
 
 The opaque-origin result remains negative. Configuration 2 is accepted on the separately administered runtime origin `https://arhimed-runtime.github.io/`: real ManimGX 0.1.1/Pyodide/WebGPU, Blob module Worker, dynamic `ValueTracker`/`always_redraw`, stop/restart, MessageChannel validation and synthetic-parent isolation were verified in Chrome and Edge. The runtime assets are locked and hash-verified. The detailed public evidence and limitations are in [the Stage 1 report](https://github.com/arhimed-runtime/arhimed-runtime.github.io/blob/main/docs/stage-1-https-origin-report.md). Canvas remains the default browser publication path; GX uses the accepted cross-origin runtime or a prepared video fallback.
 
-## Stage 2 — IN PROGRESS
+## Stage 2 — ACCEPTED (2026-10-15)
 
 Implemented slice:
 
@@ -37,6 +37,13 @@ Implemented slice:
 - AI code is now a candidate revision. It is applied only after an explicit author action and fails closed if the base revision changed;
 - 15 Canvas educational starter scenes with Chrome/Edge visual baselines.
 
-Current acceptance evidence: build plus Canvas and Stage 2 contract tests pass in Chrome and Edge. Remaining Stage 2 acceptance work: complete the UI-level ManimGX opt-in verification against the newly published Studio URL and record the performance comparison; only then mark this stage accepted and start Stage 3.
+Acceptance evidence:
+
+- `npm run build` passes. The original Canvas regression checks, source migration, AI candidate-review flow and adapter contract pass in Chrome 155.0.8059.40 and Edge 155.0.4283.45.
+- The published Studio has an end-to-end test from `https://resarytrew.github.io/arhimedstudio/` to `https://arhimed-runtime.github.io/`. It explicitly creates a separate ManimGX scene, writes `import manimgx as m` source by hand, and observes a rendered result in the isolated `allow-scripts allow-same-origin` iframe in Chrome and Edge. The test also asserts the sandbox attributes. No Canvas source is converted or overwritten.
+- The Canvas interpreter and its reference-frame suite remain browser-only. Its parser and renderer are unchanged by the adapter wrapper; the normal Chrome/Edge regression suite checks all 15 shipped starter scenes and legacy `arhimed.projects.v1` migration. Canvas therefore retains its existing preview, native timeline, PNG and WebM export path.
+- Stage 1 records the independent runtime timing baseline on the same Windows 11 / RTX 3070 station: warm simple-scene p95 was 113 ms in Chrome and 64 ms in Edge, below the one-second target. Studio's cross-origin opt-in test adds no runtime package or Python initialization step beyond that fixed runtime. Cold initialization remains separate (10,967 ms Chrome; 8,560 ms Edge) and is shown to the author as runtime setup rather than treated as an interactive-frame metric.
+
+Stage 3 may begin only as a separate publication increment. It must not make the local Python extensions mandatory or change the accepted Canvas/GX contracts.
 
 The architecture specification describes the target, not completed features. Record evidence and unresolved conditions here before advancing.

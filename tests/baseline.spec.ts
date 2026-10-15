@@ -139,6 +139,7 @@ test('Stage 2 registry keeps Canvas compatibility and does not persist provider 
     const canvas=studioEngineRegistry.get('arhimed-canvas');
     const gx=studioEngineRegistry.get('manimgx-browser');
     const probe=await gx?.probe();
+    const gxProject=store.setActiveSceneEngine(project,'manimgx-browser');
     const candidate=store.addAiCandidate(project,source.replace('wait(0.1)','wait(0.2)'),project.scenes[0].currentRevision);
     const stale=store.updateSceneSource(candidate.project,source.replace('wait(0.1)','wait(0.3)'));
     return {
@@ -146,6 +147,7 @@ test('Stage 2 registry keeps Canvas compatibility and does not persist provider 
       project,
       canvas:canvas?.metadata,
       gxAvailable:probe?.ok && probe.value.available,
+      gxProject,
       staleAccepted:store.acceptAiCandidate(stale,candidate.candidate.id),
     };
   },legacy);
@@ -154,6 +156,9 @@ test('Stage 2 registry keeps Canvas compatibility and does not persist provider 
   expect(result.project.scenes[0].revisions).toHaveLength(1);
   expect(result.canvas).toMatchObject({engineId:'arhimed-canvas',adapterVersion:'1'});
   expect(result.gxAvailable).toBe(false);
+  expect(result.gxProject.scenes).toHaveLength(2);
+  expect(result.gxProject.scenes[0]).toMatchObject({engineId:'arhimed-canvas',source:legacy});
+  expect(result.gxProject.scenes[1]).toMatchObject({engineId:'manimgx-browser',dialect:'manimgx-0.1.1',source:legacy});
   expect(result.staleAccepted).toBeNull();
   await page.goto('/#/studio');
   await page.getByRole('button',{name:'Настройки ИИ'}).click();
