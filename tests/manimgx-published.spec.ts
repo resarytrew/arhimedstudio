@@ -2,12 +2,16 @@ import { expect, test } from "@playwright/test";
 
 const publishedStudio = "https://resarytrew.github.io/arhimedstudio/?stage2=4bec489#/studio";
 const gxScene = `import manimgx as m
+import numpy as np
 
-class CrossOriginScene(m.Scene):
+class TaylorSine(m.Scene):
     def construct(self):
-        circle = m.Circle(color=m.BLUE, fill_opacity=0.3)
-        label = m.Text("ArhimedStudio ManimGX").next_to(circle, m.DOWN)
-        self.play(m.Create(circle), m.Write(label), run_time=0.2)
+        title = m.Text("sin(x) и полином Тейлора", font_size=34).to_edge(m.UP)
+        axes = m.Axes(x_range=[-3.2, 3.2, 1], y_range=[-1.5, 1.5, 1], x_length=8.5, y_length=4.5, tips=False)
+        sine = axes.plot(lambda x: np.sin(x), x_range=[-3.0, 3.0], color=m.TEAL)
+        taylor = axes.plot(lambda x: x - x**3 / 6 + x**5 / 120, x_range=[-3.0, 3.0], color=m.YELLOW)
+        self.play(m.Write(title), m.Create(axes), run_time=0.2)
+        self.play(m.Create(sine), m.Create(taylor), run_time=0.2)
         self.wait(0.1)
 `;
 

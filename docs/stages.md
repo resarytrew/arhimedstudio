@@ -35,6 +35,7 @@ Implemented slice:
 - new `arhimed.projects.v2` storage with original scene source, engine metadata, immutable source revisions and candidate AI revisions; `arhimed.projects.v1` is preserved and imported without rewriting source;
 - `AIOrchestratorV1`, offline/OpenRouter/OpenAI-compatible provider selection, one request per project, `AbortController` cancellation, normalized provider errors and in-memory API keys;
 - AI code is now a candidate revision. It is applied only after an explicit author action and fails closed if the base revision changed;
+- AI profiles, static candidate validation and explicit error-repair candidates are implemented in the Stage 2 slice; a successful static check never claims Python execution;
 - 15 Canvas educational starter scenes with Chrome/Edge visual baselines.
 
 Acceptance evidence:

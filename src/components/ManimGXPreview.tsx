@@ -7,11 +7,14 @@ import { uid } from "../lib/store";
 interface Props {
   projectId: string;
   scene: Scene;
+  onDiagnostic?: (message: string) => void;
 }
 
 /** The Python runtime remains in a cross-origin sandbox and never receives Studio storage or credentials. */
-export function ManimGXPreview({ projectId, scene }: Props) {
+export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
   const host = useRef<HTMLDivElement>(null);
+  const diagnosticHandler = useRef(onDiagnostic);
+  diagnosticHandler.current = onDiagnostic;
   const [message, setMessage] = useState<string | null>("Подключение изолированного ManimGX runtime…");
 
   useEffect(() => {
@@ -23,7 +26,10 @@ export function ManimGXPreview({ projectId, scene }: Props) {
     void (async () => {
       const created = await adapter.createSession(context, (event) => {
         if (cancelled) return;
-        if (event.type === "diagnostic") setMessage(event.message);
+        if (event.type === "diagnostic") {
+          setMessage(event.message);
+          diagnosticHandler.current?.(event.message);
+        }
         if (event.type === "result" && event.result === "rendered") setMessage(null);
       });
       if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
@@ -32,7 +38,10 @@ export function ManimGXPreview({ projectId, scene }: Props) {
       session.iframe.style.cssText = "width:100%;height:100%;border:0;background:#000";
       host.current.replaceChildren(session.iframe);
       const loaded = await adapter.loadScene(session, context, scene);
-      if (!loaded.ok && !cancelled) setMessage(loaded.message);
+      if (!loaded.ok && !cancelled) {
+        setMessage(loaded.message);
+        diagnosticHandler.current?.(loaded.message);
+      }
     })();
     return () => { cancelled = true; void session?.dispose(); };
   }, [projectId, scene]);

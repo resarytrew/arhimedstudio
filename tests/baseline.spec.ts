@@ -227,3 +227,36 @@ test('Stage 2 registry keeps Canvas compatibility and does not persist provider 
   const serialized=await page.evaluate(()=>JSON.stringify(localStorage));
   expect(serialized).not.toContain('sk-live-never-persist');
 });
+
+test('AI uses one engine profile, rejects known incompatible code, and creates a safe GX Taylor candidate', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error Vite source module for browser contract test
+    const { AI_ENGINE_PROFILES, AIOrchestratorV1 } = await import('/src/ai/orchestrator.ts');
+    // @ts-expect-error browser source module
+    const { validateAiCandidate } = await import('/src/ai/validation.ts');
+    const orchestrator = new AIOrchestratorV1();
+    const candidate = await orchestrator.generate({
+      projectId: 'gx-taylor', engine: 'manimgx-browser', baseRevision: 'r1',
+      settings: { provider: 'offline', baseUrl: '', apiKey: '', model: '', rememberKey: false },
+      history: [], prompt: 'Покажи приближение синуса полиномами Тейлора', source: '',
+    });
+    return {
+      canvasPrompt: AI_ENGINE_PROFILES['arhimed-canvas'].instructions,
+      gxPrompt: AI_ENGINE_PROFILES['manimgx-browser'].instructions,
+      candidate,
+      badImport: validateAiCandidate('import manimgx as m\nimport math\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(1)\n', 'manimgx-browser'),
+      badNumpy: validateAiCandidate('import manimgx as m\nimport numpy as np\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(np.math.factorial(3))\n', 'manimgx-browser'),
+      badCanvas: validateAiCandidate('import manimx as m\n\nclass A(m.Scene):\n    def construct(self):\n        t = m.ValueTracker(0)\n        self.wait(1)\n', 'arhimed-canvas'),
+    };
+  });
+  expect(result.canvasPrompt).toContain('Не используй ValueTracker');
+  expect(result.gxPrompt).toContain('ValueTracker и always_redraw разрешены');
+  expect(result.candidate.baseRevision).toBe('r1');
+  expect(result.candidate.reply.code).toContain('import manimgx as m');
+  expect(result.candidate.reply.code).not.toContain('np.math');
+  expect(result.candidate.validation.status).toBe('passed');
+  expect(result.badImport.status).toBe('rejected');
+  expect(result.badNumpy.status).toBe('rejected');
+  expect(result.badCanvas.status).toBe('rejected');
+});

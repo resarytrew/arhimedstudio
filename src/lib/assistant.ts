@@ -1,4 +1,5 @@
 import { genericCode, TEMPLATES } from "./templates";
+import type { AiEngineId } from "../ai/profiles";
 
 export interface AssistantReply {
   text: string;
@@ -15,7 +16,6 @@ export interface LLMSettings {
 }
 
 export interface LLMPreferences extends Omit<LLMSettings, "apiKey"> {}
-export type AssistantEngine = "arhimed-canvas" | "manimgx-browser";
 
 export const DEFAULT_LLM_PREFERENCES: LLMPreferences = {
   provider: "offline",
@@ -71,8 +71,50 @@ function setBackground(code: string, color: string) {
 }
 
 /** Local "assistant": understands typical lesson topics and simple edits. */
-export function localAssistant(prompt: string, currentCode: string, isFirst: boolean): AssistantReply {
+function gxStarterCode(topic: string) {
+  const safeTitle = topic.replace(/["\\]/g, "'").slice(0, 72) || "Новая сцена";
+  return `import manimgx as m
+
+class LessonScene(m.Scene):
+    def construct(self):
+        title = m.Text("${safeTitle}", font_size=38).to_edge(m.UP)
+        circle = m.Circle(radius=1.25, color=m.TEAL, fill_opacity=0.2)
+        caption = m.Text("Настроим сцену вместе", font_size=28).next_to(circle, m.DOWN)
+        self.play(m.Write(title), m.Create(circle), run_time=1.0)
+        self.play(m.Write(caption), run_time=0.8)
+        self.wait(1.0)
+`;
+}
+
+function gxTaylorSineCode() {
+  return `import manimgx as m
+import numpy as np
+
+class TaylorSine(m.Scene):
+    def construct(self):
+        title = m.Text("sin(x) и полином Тейлора", font_size=38).to_edge(m.UP)
+        axes = m.Axes(x_range=[-3.2, 3.2, 1], y_range=[-1.5, 1.5, 1], x_length=9.2, y_length=4.8, tips=False)
+        sine = axes.plot(lambda x: np.sin(x), x_range=[-3.0, 3.0], color=m.TEAL)
+        taylor = axes.plot(lambda x: x - x**3 / 6 + x**5 / 120, x_range=[-3.0, 3.0], color=m.YELLOW)
+        sine_label = m.Text("sin(x)", font_size=26, color=m.TEAL).next_to(axes.c2p(2.3, 0.7), m.UP)
+        taylor_label = m.Text("x − x³/6 + x⁵/120", font_size=23, color=m.YELLOW).next_to(axes.c2p(0.0, -1.15), m.DOWN)
+        self.play(m.Write(title), m.Create(axes), run_time=1.2)
+        self.play(m.Create(sine), m.Write(sine_label), run_time=1.2)
+        self.play(m.Create(taylor), m.Write(taylor_label), run_time=1.4)
+        self.wait(1.0)
+`;
+}
+
+export function localAssistant(prompt: string, currentCode: string, isFirst: boolean, engine: AiEngineId = "arhimed-canvas"): AssistantReply {
   const p = prompt.toLowerCase();
+
+  if (engine === "manimgx-browser" && /(тейлор|taylor).*(син|sin)|(син|sin).*(тейлор|taylor)/.test(p)) {
+    return {
+      text: "Построил sin(x) и его приближение полиномом Тейлора пятой степени. В коде используются только закреплённые импорты ManimGX и numpy.",
+      code: gxTaylorSineCode(),
+      title: isFirst ? "Ряд Тейлора" : undefined,
+    };
+  }
 
   // --- edits of the current scene ---
   if (/медленн|помедлен|slower/.test(p)) {
@@ -116,7 +158,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
     for (const k of t.keywords) if (p.includes(k)) score += k.length > 4 ? 2 : 1;
     if (score > 0 && (!best || score > best.score)) best = { t, score };
   }
-  if (best) {
+  if (best && engine === "arhimed-canvas") {
     return { text: best.t.reply, code: best.t.code, title: isFirst ? best.t.title : undefined };
   }
 
@@ -125,32 +167,9 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   return {
     text:
       `Подготовил стартовую сцену-заготовку по теме «${nice}»: заголовок, акцентная линия и набор фигур, которые можно превратить в иллюстрацию. Уточните, что именно показать (например, формулу, график или шаги решения), — и я дострою анимацию. В офлайн-режиме я лучше всего знаю темы: кинематика, графы, линейная алгебра, ряды, геометрия, тригонометрия и производные. Подключите языковую модель в настройках, чтобы генерировать любые сцены.`,
-    code: genericCode(nice),
+    code: engine === "manimgx-browser" ? gxStarterCode(nice) : genericCode(nice),
     title: isFirst ? nice.slice(0, 32) : undefined,
   };
-}
-
-const SYSTEM_PROMPT = `Ты — ИИ-помощник учителя в веб-приложении ArhimedStudio. Ты пишешь короткие обучающие анимации на Python в стиле Manim.
-Отвечай по-русски: 1–3 предложения о том, что показывает сцена, затем ОДИН блок кода \`\`\`python ... \`\`\`.
-Поддерживаемое подмножество (используй только его):
-- Объекты: m.Circle, m.Square, m.Rectangle, m.RoundedRectangle, m.Triangle, m.RegularPolygon, m.Polygon, m.Dot, m.Line, m.DashedLine, m.Arrow, m.DoubleArrow, m.Vector, m.Arc, m.Ellipse, m.Text, m.Tex, m.MathTex (простая LaTeX-разметка), m.Axes, m.NumberPlane, m.NumberLine, m.FunctionGraph, m.ParametricFunction, m.VGroup, m.SurroundingRectangle, m.BackgroundRectangle, m.Brace, m.DecimalNumber.
-- Методы: shift, move_to, scale, rotate, set_color, set_fill, set_stroke, set_opacity, next_to, to_edge, to_corner, arrange, get_center/get_top/get_end, copy, apply_matrix, axes.c2p, axes.plot(lambda x: ..., x_range=[a,b], color=...), axes.get_axis_labels, axes.get_area.
-- Анимации: m.Create, m.Write, m.FadeIn(shift=, scale=), m.FadeOut, m.Transform, m.ReplacementTransform, m.TransformFromCopy, m.GrowFromCenter, m.GrowArrow, m.Indicate, m.Circumscribe, m.Rotate, m.MoveAlongPath, m.LaggedStart, m.AnimationGroup, m.Succession, obj.animate.<метод>(...).
-- self.play(..., run_time=, rate_func=m.linear), self.wait(t), self.add, self.remove.
-- Константы: UP, DOWN, LEFT, RIGHT, UL, UR, DL, DR, ORIGIN, PI, TAU, DEGREES, цвета (RED, BLUE, GREEN, YELLOW, ORANGE, PURPLE, PINK, TEAL, GOLD, WHITE, GREY, LIGHT_GRAY, BLUE_E ...). Математика: np.sin, np.cos, np.sqrt, np.exp, np.array.
-- Поддерживаются циклы for, if/else, лямбды, словари и списки. НЕ используй list comprehension, updaters, ValueTracker, always_redraw, 3D.
-Кадр 14.2 × 8 единиц, центр (0,0). Подписи делай по-русски, шрифт font_size 28–48. Сцена — 5–20 секунд.`;
-
-function systemPromptFor(engine: AssistantEngine) {
-  if (engine === "manimgx-browser") {
-    return `${SYSTEM_PROMPT}
-
-РЕЖИМ: ManimGX 0.1.1. Первая строка кода строго: import manimgx as m. Допускается import numpy as np.
-Не добавляй другие import/from-импорты, динамическую загрузку пакетов, сеть или доступ к браузерным данным. Используй API ManimGX; ValueTracker и always_redraw разрешены.`;
-  }
-  return `${SYSTEM_PROMPT}
-
-РЕЖИМ: Arhimed Canvas. Первая строка кода строго: import manimx as m. Используй только указанное выше Canvas-подмножество. Не используй ValueTracker, always_redraw, updaters или 3D.`;
 }
 
 export async function llmAssistant(
@@ -158,12 +177,13 @@ export async function llmAssistant(
   history: { role: "user" | "assistant"; content: string }[],
   prompt: string,
   currentCode: string,
-  signal?: AbortSignal,
-  engine: AssistantEngine = "arhimed-canvas"
+  signal: AbortSignal | undefined,
+  systemPrompt: string,
+  maxOutputTokens: number,
 ): Promise<AssistantReply> {
   if (settings.provider === "offline") throw new Error("Выбран офлайн-ассистент.");
   if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
-  if (prompt.length > 8_000 || currentCode.length > 16_384) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
+  if (prompt.length > 4_000 || currentCode.length > 16_384) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
   const url = settings.baseUrl.replace(/\/$/, "") + "/chat/completions";
   const res = await fetch(url, {
     method: "POST",
@@ -175,9 +195,10 @@ export async function llmAssistant(
     body: JSON.stringify({
       model: settings.model,
       temperature: 0.4,
+      max_tokens: maxOutputTokens,
       messages: [
-        { role: "system", content: systemPromptFor(engine) },
-        ...history.slice(-6),
+        { role: "system", content: systemPrompt },
+        ...history,
         {
           role: "user",
           content: `Текущий код сцены:\n\`\`\`python\n${currentCode}\n\`\`\`\n\nЗапрос учителя: ${prompt}`,

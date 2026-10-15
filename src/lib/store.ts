@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { EngineId } from "../engines/contracts";
+import type { AiCandidateValidationV1 } from "../ai/validation";
 import { WELCOME_CODE } from "./templates";
 import { DEFAULT_LLM_PREFERENCES, type LLMPreferences } from "./assistant";
 
@@ -10,6 +11,7 @@ export interface Message {
   code?: string;
   baseRevision?: string;
   candidateRevision?: string;
+  validation?: AiCandidateValidationV1;
   ts: number;
   error?: boolean;
 }

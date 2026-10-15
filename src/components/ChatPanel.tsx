@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, ChevronLeft, ChevronRight, Code2, MessagesSquare, Plus, Sparkles, Square } from "lucide-react";
+import { AlertTriangle, ArrowUp, Check, ChevronLeft, ChevronRight, CircleCheck, Code2, MessagesSquare, Plus, Sparkles, Square } from "lucide-react";
 import type { Message } from "../lib/store";
 import { TEMPLATES } from "../lib/templates";
 import { cn } from "../utils/cn";
@@ -140,9 +140,25 @@ export function ChatPanel(p: Props) {
                         "whitespace-pre-wrap text-[14px] leading-relaxed text-slate-700 dark:text-slate-200",
                         m.error && "text-red-600 dark:text-red-400"
                       )}
-                    >
-                      {p.typingId === m.id ? <Typewriter text={m.text} onDone={p.onTypingDone} /> : m.text}
-                    </div>
+                     >
+                       {p.typingId === m.id ? <Typewriter text={m.text} onDone={p.onTypingDone} /> : m.text}
+                     </div>
+                    {m.validation && p.typingId !== m.id && (
+                      <div
+                        className={cn(
+                          "mt-2 rounded-lg px-2.5 py-2 text-[11.5px] leading-relaxed",
+                          m.validation.status === "passed" && "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+                          m.validation.status === "warning" && "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200",
+                          m.validation.status === "rejected" && "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200",
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5 font-medium">
+                          {m.validation.status === "passed" ? <CircleCheck size={13} /> : <AlertTriangle size={13} />}
+                          {m.validation.status === "passed" ? "Статическая проверка пройдена" : m.validation.status === "warning" ? "Статическая проверка: замечания" : "Кандидат отклонён проверкой"}
+                        </div>
+                        <p className="mt-0.5 opacity-85">{m.validation.status === "passed" ? "Код не выполнялся: примените кандидат и проверьте превью." : m.validation.diagnostics.map((item) => `${item.line ? `Строка ${item.line}: ` : ""}${item.message}`).join(" ")}</p>
+                      </div>
+                    )}
                     {m.code && p.typingId !== m.id && (
                       <div className="fade-up mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-slate-800/60">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">

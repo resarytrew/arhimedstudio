@@ -12,6 +12,7 @@ import { loadEngineFonts } from "../engine/fonts";
 import type { LLMSettings } from "../lib/assistant";
 import { WELCOME_CODE } from "../lib/templates";
 import { aiOrchestrator } from "../ai/orchestrator";
+import type { AiCandidateValidationV1 } from "../ai/validation";
 import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
 import {
   ACTIVE_KEY,
@@ -49,6 +50,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [error, setError] = useState<{ msg: string; line: number } | null>(null);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [booting, setBooting] = useState(true);
   const lastGood = useRef<string>("");
@@ -110,8 +112,9 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     // A project switch must not leak the previous scene's frame or diagnostics.
     setTimeline(null);
     setError(null);
+    setRuntimeError(null);
     lastGood.current = "";
-    if (!scene.source.trim()) return;
+    if (scene.engineId !== "arhimed-canvas" || !scene.source.trim()) return;
     let current = true;
     const id = setTimeout(() => {
       void (async () => {
@@ -187,6 +190,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     updateProject(projectId, (project) => ({ ...project, messages: [...project.messages, { id: uid(), role: "user", text, ts: Date.now() }], updatedAt: Date.now() }));
     setThinking(true);
     let reply: { text: string; code?: string; title?: string; error?: boolean };
+    let validation: AiCandidateValidationV1 | undefined;
     try {
       const result = await aiOrchestrator.generate({
         projectId,
@@ -195,8 +199,16 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         history,
         prompt: text,
         source: scene.source,
+        baseRevision,
       });
       reply = result.reply;
+      validation = result.validation;
+      if (validation.status === "rejected") {
+        reply = {
+          text: `${reply.text}\n\nКандидат не предложен: ${validation.diagnostics.map((item) => item.message).join(" ")}`,
+          error: true,
+        };
+      }
     } catch (e) {
       reply = { text: e instanceof DOMException && e.name === "AbortError" ? "Генерация отменена." : e instanceof Error ? e.message : "Не удалось получить ответ ассистента.", error: true };
     }
@@ -205,11 +217,20 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       let next = project;
       let candidateRevision: string | undefined;
       if (reply.code && !reply.error) {
-        const created = addAiCandidate(project, reply.code, baseRevision);
-        next = created.project;
-        candidateRevision = created.candidate.id;
+        if (activeScene(project).currentRevision !== baseRevision) {
+          validation = {
+            status: "warning",
+            engineId: scene.engineId === "manimgx-browser" ? "manimgx-browser" : "arhimed-canvas",
+            diagnostics: [{ message: "Сцена изменилась во время генерации; запросите новую кандидатную ревизию от актуального кода." }],
+          };
+          reply = { ...reply, code: undefined, text: `${reply.text}\n\nКандидат не добавлен: исходная сцена уже изменилась.` };
+        } else {
+          const created = addAiCandidate(project, reply.code, baseRevision);
+          next = created.project;
+          candidateRevision = created.candidate.id;
+        }
       }
-      const message: Message = { id: messageId, role: "assistant", text: reply.text, code: reply.code, baseRevision, candidateRevision, ts: Date.now(), error: reply.error };
+      const message: Message = { id: messageId, role: "assistant", text: reply.text, code: reply.code, baseRevision, candidateRevision, validation, ts: Date.now(), error: reply.error };
       return {
         ...next,
         title: reply.title && (next.title === "Новое видео" || next.title === "Пример видео") ? reply.title : next.title,
@@ -228,10 +249,15 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     pushMessage({ id: uid(), role: "assistant", text: "Остановлено.", ts: Date.now() });
   };
 
+  const repairWithAi = (detail: string) => {
+    if (!active) return;
+    void handleSend(`Исправь ошибку выполнения сцены. Верни полную замену исходного кода по правилам текущего движка. Ошибка: ${detail}`);
+  };
+
   const fixError = () => {
     if (!error) return;
     if (llm.provider !== "offline" && llm.apiKey) {
-      handleSend(`Исправь ошибку в коде (строка ${error.line}): ${error.msg}`);
+      repairWithAi(`Строка ${error.line}: ${error.msg}`);
     } else if (lastGood.current && lastGood.current !== code) {
       const good = lastGood.current;
       setCode(good);
@@ -396,7 +422,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       bodyClassName="bg-black"
     >
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative h-full bg-black">
-        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={scene} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
+        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
         {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
@@ -420,7 +446,22 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
               onClick={fixError}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
             >
-              <Wand2 size={13} /> Исправить
+            <Wand2 size={13} /> Исправить с ИИ
+            </button>
+          </div>
+        )}
+        {scene.engineId === "manimgx-browser" && runtimeError && (
+          <div className="fade-up absolute inset-x-3 top-3 flex items-start gap-3 rounded-xl bg-red-50/95 px-3.5 py-2.5 text-[12.5px] text-red-700 shadow-lg ring-1 ring-red-200 backdrop-blur dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">Ошибка ManimGX</div>
+              <div className="truncate opacity-80">{runtimeError}</div>
+            </div>
+            <button
+              onClick={() => repairWithAi(runtimeError)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
+            >
+              <Wand2 size={13} /> Исправить с ИИ
             </button>
           </div>
         )}
