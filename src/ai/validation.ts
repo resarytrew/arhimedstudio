@@ -46,8 +46,8 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
       const unknown = roots.find((root) => !GX_IMPORT_ROOTS.has(root));
       if (unknown) reject(`Импорт «${unknown}» не входит в закреплённый браузерный runtime.`, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
-    if (!/class\s+\w+\s*\(\s*(?:(?:m|manimgx)\.(?:Scene|ThreeDScene)|(?:Scene|ThreeDScene))\s*\)\s*:/.test(source)) {
-      reject("Нужен класс, наследующий Scene или ThreeDScene из manimgx.");
+    if (!/class\s+\w+\s*\(\s*(?:(?:m|manimgx)\.Scene|Scene)\s*\)\s*:/.test(source)) {
+      reject("Нужен класс, наследующий Scene из manimgx.");
     }
   } else {
     const firstCodeLine = source.split("\n").find((line) => line.trim() && !line.trim().startsWith("#"))?.trim();
@@ -65,6 +65,7 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
     ? [
       [/\bnp\.math\b/, "np.math не существует; используйте разрешённые операции numpy или готовую константу."],
       [/\b(?:micropip|importlib|__import__|js|pyodide|fetch|XMLHttpRequest|WebSocket)\b/, "Закреплённый ManimGX runtime запрещает динамические пакеты, bridge Pyodide/JS и сетевые API."],
+      [/\b(?:ThreeDScene|set_camera_orientation|ThreeDAxes|Surface)\b/, "3D API ещё не сертифицирован реальным browser-прогоном; не генерируйте его, пока он не будет отдельно подтверждён."],
     ]
     : [
       [/\b(?:ValueTracker|always_redraw|add_updater|updater)\b/, "Canvas-профиль не поддерживает ValueTracker, always_redraw и updaters."],
