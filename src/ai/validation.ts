@@ -78,7 +78,9 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
   for (let match = oversizedFont.exec(source); match; match = oversizedFont.exec(source)) {
     const size = Number(match[1]);
     const line = source.slice(0, match.index).split("\n").length;
-    if (size > 56) diagnostics.push({ line, message: `Размер текста ${size} превышает предел 56 и может выйти за кадр.` });
+    // Layout is verified by the preview. A valid documented scene must not be rejected merely
+    // because a heuristic thinks its typography may be large.
+    if (size > 56) warnings.push({ line, message: `Размер текста ${size} большой: проверьте композицию в превью.` });
     else if (size > 48) warnings.push({ line, message: `Размер текста ${size} больше рекомендуемого предела 48: проверьте композицию в превью.` });
   }
 

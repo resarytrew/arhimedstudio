@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Clapperboard,
+  BookOpenCheck,
   Code2,
   MessageSquarePlus,
   MessagesSquare,
@@ -40,6 +41,7 @@ interface Props {
   dark: boolean;
   onToggleTheme: () => void;
   onSettings: () => void;
+  onOpenLesson: () => void;
   onHome: () => void;
   onToast: (t: string) => void;
   engineId: EngineId;
@@ -61,6 +63,9 @@ export function Sidebar(p: Props) {
         </IconBtn>
         <IconBtn onClick={p.onNew} title="Новое видео">
           <Plus size={16} />
+        </IconBtn>
+        <IconBtn onClick={p.onOpenLesson} title="Рабочее пространство урока">
+          <BookOpenCheck size={16} />
         </IconBtn>
         {p.hidden.map((id) => {
           const I = PANEL_META[id].icon;
@@ -200,6 +205,12 @@ export function Sidebar(p: Props) {
       )}
 
       <div className="space-y-0.5 px-2 pb-2 pt-2">
+        <button
+          onClick={p.onOpenLesson}
+          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50"
+        >
+          <BookOpenCheck size={15} className="text-blue-500" /> Рабочее пространство
+        </button>
         <button
           onClick={p.onSettings}
           className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50"

@@ -8,17 +8,21 @@ interface Props {
   projectId: string;
   scene: Scene;
   onDiagnostic?: (message: string) => void;
+  onRendered?: (durationMs: number) => void;
 }
 
 /** The Python runtime remains in a cross-origin sandbox and never receives Studio storage or credentials. */
-export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
+export function ManimGXPreview({ projectId, scene, onDiagnostic, onRendered }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const diagnosticHandler = useRef(onDiagnostic);
   diagnosticHandler.current = onDiagnostic;
+  const renderedHandler = useRef(onRendered);
+  renderedHandler.current = onRendered;
   const [message, setMessage] = useState<string | null>("Подключение изолированного ManimGX runtime…");
 
   useEffect(() => {
     let cancelled = false;
+    const startedAt = performance.now();
     let session: ManimGXBrowserSessionV1 | undefined;
     setMessage("Подключение изолированного ManimGX runtime…");
     const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
@@ -30,7 +34,10 @@ export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
           setMessage(event.message);
           diagnosticHandler.current?.(event.message);
         }
-        if (event.type === "result" && event.result === "rendered") setMessage(null);
+        if (event.type === "result" && event.result === "rendered") {
+          setMessage(null);
+          renderedHandler.current?.(Math.round(performance.now() - startedAt));
+        }
       });
       if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
       session = created.value;

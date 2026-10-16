@@ -267,7 +267,7 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
   expect(result.badImport.status).toBe('rejected');
   expect(result.badNumpy.status).toBe('rejected');
   expect(result.badCanvas.status).toBe('rejected');
-  expect(result.cramped.status).toBe('rejected');
+  expect(result.cramped.status).toBe('warning');
   expect(result.canvasFallback).toBeGreaterThanOrEqual(12);
 });
 
@@ -306,4 +306,34 @@ test('OpenAI-compatible replies accept content parts, forced SSE, and a full com
   });
   expect(requestBody).toMatchObject({ stream: false });
   expect(result.code).toContain('class Reply(m.Scene)');
+});
+
+test('local lesson backups are encrypted, recoverable, and reject a wrong passphrase', async ({ page }) => {
+  await page.goto('/');
+  const report = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { newProject } = await import('/src/lib/store.ts');
+    // @ts-expect-error browser source module
+    const { encryptProject, decryptProject } = await import('/src/lib/secure-bundle.ts');
+    const project = newProject('Private lesson', 'secret source must not be visible');
+    const encrypted = await encryptProject(project, 'correct horse battery staple');
+    const restored = await decryptProject(encrypted, 'correct horse battery staple');
+    let wrongPassword = false;
+    try { await decryptProject(encrypted, 'wrong password phrase'); } catch { wrongPassword = true; }
+    return { encrypted, source: restored.code, wrongPassword };
+  });
+  expect(report.encrypted).not.toContain('secret source must not be visible');
+  expect(report.source).toBe('secret source must not be visible');
+  expect(report.wrongPassword).toBe(true);
+});
+
+test('lesson workspace keeps planning local and external AI history opt-in disabled by default', async ({ page }) => {
+  await page.goto('/#/studio');
+  await page.getByRole('button', { name: 'Рабочее пространство', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Рабочее пространство урока' })).toBeVisible();
+  await page.getByLabel('Цель урока').fill('Понять наклон касательной');
+  await page.getByRole('button', { name: 'Закрыть рабочее пространство' }).click();
+  await page.getByRole('button', { name: 'Настройки ИИ', exact: true }).click();
+  await page.getByRole('button', { name: /Совместимый API/ }).click();
+  await expect(page.getByLabel('Передавать историю диалога.')).not.toBeChecked();
 });
