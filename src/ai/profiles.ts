@@ -2,7 +2,7 @@ export type AiEngineId = "arhimed-canvas" | "manimgx-browser";
 
 export interface AiEngineProfileV1 {
   id: AiEngineId;
-  version: "1";
+  version: "1" | "2";
   instructions: string;
   /** A documented, non-exhaustive set of examples. It is not an allow-all parser. */
   allowedApi: readonly string[];
@@ -35,21 +35,24 @@ export const AI_ENGINE_PROFILES: Record<AiEngineId, AiEngineProfileV1> = {
   },
   "manimgx-browser": {
     id: "manimgx-browser",
-    version: "1",
+    version: "2",
     instructions: `${SHARED_RULES}
 
-РЕЖИМ: ManimGX 0.1.1 в закреплённом браузерном runtime. Первая строка: import manimgx as m. Дополнительно допустим import numpy as np.
-Не добавляй другие import/from-импорты. Нельзя использовать micropip, importlib, __import__, fetch, XMLHttpRequest, WebSocket или произвольные URL.
-ValueTracker и always_redraw разрешены, если они нужны для короткой 2D-сцены. Не используй 3D. Не обращайся к np.math: у numpy нет такого API.`,
-    allowedApi: ["m.Circle", "m.Text", "m.Axes", "m.ValueTracker", "m.always_redraw", "m.Create", "self.play", "self.wait"],
-    repairRule: "Верни полную замену для закреплённого ManimGX runtime без новых импортов, пакетов и сетевых обращений.",
+РЕЖИМ: полный документированный API ManimGX 0.1.1 в закреплённом браузерном runtime. Это не Canvas-подмножество и не Manim Community с выдуманными заменами.
+Обычный вариант импорта для генерируемого кода: import manimgx as m; при вычислениях можно добавить import numpy as np или import math. Runtime также принимает документированные варианты import manimgx, from manimgx import ..., from manimgx import * и безопасные закреплённые математические модули Python. Выбирай один ясный стиль и согласованно используй его в классе сцены.
+Используй реальные имена ManimGX 0.1.1: Text, Tex, MathTex; Mobject, VMobject, Group, VGroup; геометрию, координатные системы Axes/NumberPlane/ComplexPlane и plot; Transform/ReplacementTransform/TransformMatchingTex, AnimationGroup/Succession/LaggedStart; ValueTracker, always_redraw, add_updater; 2D и документированный 3D API (ThreeDScene, камера и поверхности), когда это оправдано задачей. Допустим обычный Python: функции, циклы, comprehensions, *args/**kwargs, распаковка, lambda, dataclasses и математические вычисления.
+Не используй micropip, importlib, __import__, js/pyodide bridge, браузерные API, файловую систему, сеть, URL или установку пакетов. Не обращайся к np.math: используй math или сам numpy. В браузере не создавай видеофайлы, не загружай локальные ресурсы и не вызывай внешние audio/voice-провайдеры.`,
+    allowedApi: ["Text", "Tex", "MathTex", "Axes", "NumberPlane", "ComplexPlane", "VGroup", "TransformMatchingTex", "ValueTracker", "always_redraw", "add_updater", "ThreeDScene", "self.play"],
+    repairRule: "Верни полную замену для ManimGX 0.1.1, сохранив документированный API и закреплённые безопасные импорты; не добавляй пакеты, сеть или доступ к файлам.",
   },
 };
 
 export const AI_CONTEXT_LIMITS_V1 = {
   promptChars: 4_000,
-  sourceChars: 16_384,
+  // Python is independently bounded by the isolated runtime.  This limit is for the LLM
+  // request body, where 64 KiB leaves useful room for prompt and revision history.
+  sourceChars: 65_536,
   historyChars: 6_000,
   historyMessageChars: 1_200,
-  outputTokens: 2_400,
+  outputTokens: 6_000,
 } as const;

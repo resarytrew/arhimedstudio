@@ -16,29 +16,21 @@ const lineOf = (source: string, pattern: RegExp) => {
   return match ? source.slice(0, match.index).split("\n").length : undefined;
 };
 
-function balanced(source: string) {
-  const pairs: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
-  const stack: { value: string; line: number }[] = [];
-  let quote = "";
-  let escaped = false;
-  let line = 1;
-  for (const char of source) {
-    if (char === "\n") line += 1;
-    if (quote) {
-      if (!escaped && char === quote) quote = "";
-      escaped = !escaped && char === "\\";
-      continue;
-    }
-    if (char === "'" || char === '"') { quote = char; continue; }
-    if (char === "(" || char === "[" || char === "{") stack.push({ value: char, line });
-    else if (char in pairs) {
-      const open = stack.pop();
-      if (!open || open.value !== pairs[char]) return { line, message: `Несогласованная скобка «${char}».` };
-    }
-  }
-  if (quote) return { line, message: "Незакрытая строка." };
-  const open = stack.pop();
-  return open ? { line: open.line, message: `Незакрытая скобка «${open.value}».` } : undefined;
+const GX_IMPORT_ROOTS = new Set([
+  "manimgx", "numpy", "math", "cmath", "statistics", "random", "fractions", "decimal",
+  "dataclasses", "functools", "itertools", "collections", "operator",
+]);
+
+/** This is advisory only. The isolated Python runtime parses the actual source with `ast`. */
+function gxImports(source: string) {
+  const imports = source.match(/^\s*(?:from\s+[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s+import\s+.+|import\s+.+)$/gm) ?? [];
+  return imports.map((statement) => {
+    const match = /^\s*(?:from\s+([A-Za-z_]\w*)[^\s]*\s+import\s+.+|import\s+(.+))\s*$/.exec(statement);
+    const roots = match?.[1]
+      ? [match[1]]
+      : (match?.[2] ?? "").split(",").map((piece) => piece.trim().split(/\s+as\s+|\./, 1)[0]);
+    return { statement, roots };
+  });
 }
 
 /** Lightweight, non-executing guard. A passed result is never a claim that Python has run. */
@@ -47,25 +39,32 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
   const warnings: AiCandidateDiagnosticV1[] = [];
   const reject = (message: string, pattern?: RegExp) => diagnostics.push({ line: pattern ? lineOf(source, pattern) : undefined, message });
   if (!source.trim()) reject("ИИ не вернул исходный код сцены.");
-  const expectedImport = engineId === "manimgx-browser" ? "import manimgx as m" : "import manimx as m";
-  const firstCodeLine = source.split("\n").find((line) => line.trim() && !line.trim().startsWith("#"))?.trim();
-  if (firstCodeLine !== expectedImport) reject(`Первая строка должна быть: ${expectedImport}.`);
-
-  const imports = source.match(/^\s*(?:from\s+\S+\s+import\s+.+|import\s+.+)$/gm) ?? [];
-  for (const statement of imports) {
-    const normalized = statement.trim();
-    if (normalized !== expectedImport && normalized !== "import numpy as np") reject(`Неподдерживаемый импорт: ${normalized}.`, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  if (engineId === "manimgx-browser") {
+    const imports = gxImports(source);
+    if (!imports.some(({ roots }) => roots.includes("manimgx"))) reject("Нужен документированный импорт пакета manimgx.");
+    for (const { statement, roots } of imports) {
+      const unknown = roots.find((root) => !GX_IMPORT_ROOTS.has(root));
+      if (unknown) reject(`Импорт «${unknown}» не входит в закреплённый браузерный runtime.`, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    if (!/class\s+\w+\s*\(\s*(?:(?:m|manimgx)\.(?:Scene|ThreeDScene)|(?:Scene|ThreeDScene))\s*\)\s*:/.test(source)) {
+      reject("Нужен класс, наследующий Scene или ThreeDScene из manimgx.");
+    }
+  } else {
+    const firstCodeLine = source.split("\n").find((line) => line.trim() && !line.trim().startsWith("#"))?.trim();
+    if (firstCodeLine !== "import manimx as m") reject("Первая строка должна быть: import manimx as m.");
+    const imports = source.match(/^\s*(?:from\s+\S+\s+import\s+.+|import\s+.+)$/gm) ?? [];
+    for (const statement of imports) {
+      const normalized = statement.trim();
+      if (normalized !== "import manimx as m" && normalized !== "import numpy as np") reject(`Неподдерживаемый импорт: ${normalized}.`, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    if (!/class\s+\w+\s*\(\s*m\.Scene\s*\)\s*:/.test(source)) reject("Нужен класс, наследующий m.Scene.");
   }
-  if (!/class\s+\w+\s*\(\s*m\.Scene\s*\)\s*:/.test(source)) reject("Нужен класс, наследующий m.Scene.");
   if (!/def\s+construct\s*\(\s*self\s*\)\s*:/.test(source)) reject("Нужен метод construct(self).");
-  const bracketError = balanced(source);
-  if (bracketError) diagnostics.push(bracketError);
 
   const forbidden: readonly [RegExp, string][] = engineId === "manimgx-browser"
     ? [
       [/\bnp\.math\b/, "np.math не существует; используйте разрешённые операции numpy или готовую константу."],
-      [/\b(?:micropip|importlib|__import__|fetch|XMLHttpRequest|WebSocket)\b/, "Закреплённый ManimGX runtime запрещает динамические пакеты, сеть и браузерные API."],
-      [/\b(?:ThreeDScene|OpenGL|set_camera_orientation)\b/, "3D не поддерживается в браузерном профиле ManimGX."],
+      [/\b(?:micropip|importlib|__import__|js|pyodide|fetch|XMLHttpRequest|WebSocket)\b/, "Закреплённый ManimGX runtime запрещает динамические пакеты, bridge Pyodide/JS и сетевые API."],
     ]
     : [
       [/\b(?:ValueTracker|always_redraw|add_updater|updater)\b/, "Canvas-профиль не поддерживает ValueTracker, always_redraw и updaters."],

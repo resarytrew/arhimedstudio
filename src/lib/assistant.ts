@@ -270,7 +270,7 @@ export async function llmAssistant(
 ): Promise<AssistantReply> {
   if (settings.provider === "offline") throw new Error("Выбран офлайн-ассистент.");
   if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
-  if (prompt.length > 4_000 || currentCode.length > 16_384) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
+  if (prompt.length > 4_000 || currentCode.length > 65_536) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
   const url = settings.baseUrl.replace(/\/$/, "") + "/chat/completions";
   const res = await fetch(url, {
     method: "POST",

@@ -1,21 +1,27 @@
 import { expect, test } from "@playwright/test";
 
-const publishedStudio = "https://resarytrew.github.io/arhimedstudio/?stage2=4bec489#/studio";
-const gxScene = `import manimgx as m
+const publishedStudio = "https://resarytrew.github.io/arhimedstudio/#/studio";
+const gxScene = `from manimgx import *
+import math
 import numpy as np
 
-class TaylorSine(m.Scene):
+class FullBrowserScene(Scene):
     def construct(self):
-        title = m.Text("sin(x) и полином Тейлора", font_size=34).to_edge(m.UP)
-        axes = m.Axes(x_range=[-3.2, 3.2, 1], y_range=[-1.5, 1.5, 1], x_length=8.5, y_length=4.5, tips=False)
-        sine = axes.plot(lambda x: np.sin(x), x_range=[-3.0, 3.0], color=m.TEAL)
-        taylor = axes.plot(lambda x: x - x**3 / 6 + x**5 / 120, x_range=[-3.0, 3.0], color=m.YELLOW)
-        self.play(m.Write(title), m.Create(axes), run_time=0.2)
-        self.play(m.Create(sine), m.Create(taylor), run_time=0.2)
+        title = Text("MathTex и динамический график", font_size=34).to_edge(UP)
+        axes = Axes(x_range=[-3, 3, 1], y_range=[-1.5, 1.5, 1], x_length=8.5, y_length=4.2, tips=False)
+        sine = axes.plot(lambda x: math.sin(x), x_range=[-3, 3], color=TEAL)
+        formula = MathTex(r"f(x)=\\sin(x)", color=YELLOW).next_to(title, DOWN)
+        value = ValueTracker(-2.4)
+        marker = always_redraw(lambda: Dot(axes.c2p(value.get_value(), np.sin(value.get_value())), color=YELLOW))
+        samples = VGroup(*(Dot(axes.c2p(x, math.sin(x)), radius=0.045, color=BLUE) for x in [-2, -1, 0, 1, 2]))
+        self.play(Write(title), Create(axes), run_time=0.2)
+        self.play(Create(sine), Write(formula), LaggedStart(*[FadeIn(dot) for dot in samples], lag_ratio=0.08), run_time=0.25)
+        self.add(marker)
+        self.play(value.animate.set_value(2.4), TransformMatchingTex(formula, MathTex(r"f(x)=\\sin(x)", color=TEAL).next_to(title, DOWN)), run_time=0.3)
         self.wait(0.1)
 `;
 
-test("published Studio renders an explicitly authored ManimGX scene on the isolated runtime origin", async ({ page }) => {
+test("published Studio completes a documented ManimGX scene on the isolated runtime origin", async ({ page }) => {
   await page.goto(publishedStudio);
   const engine = page.getByLabel("Движок сцены");
   await engine.selectOption("manimgx-browser");
@@ -24,6 +30,10 @@ test("published Studio renders an explicitly authored ManimGX scene on the isola
   await expect(runtimeFrame).toBeVisible({ timeout: 45_000 });
   const runtime = runtimeFrame.contentFrame();
   await expect.poll(async () => runtime.locator("manimgx-player").evaluate((player) => player.shadowRoot?.querySelector("canvas")?.width ?? 0)).toBeGreaterThan(0);
+  await expect.poll(async () => runtime.locator("manimgx-player").evaluate((player) => {
+    const view = player as HTMLElement & { currentTime: number; duration: number };
+    return Number.isFinite(view.duration) && view.currentTime >= view.duration;
+  }), { timeout: 30_000 }).toBe(true);
   await expect(page.getByText("ManimGX отрисовал сцену в изолированном runtime.")).toBeHidden();
   const scenes = await page.evaluate(() => {
     const projects = JSON.parse(localStorage.getItem("arhimed.projects.v2") ?? "[]");

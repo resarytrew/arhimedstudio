@@ -11,7 +11,8 @@ import {
 } from "./contracts";
 
 const PROTOCOL = "arhimed-runtime-v1";
-const MAX_SOURCE_BYTES = 16_384;
+/** Kept in lockstep with the isolated runtime; enough for a full authored lesson. */
+const MAX_SOURCE_BYTES = 262_144;
 const RUNTIME_URL = "https://arhimed-runtime.github.io/cross-origin-runtime.html";
 
 interface RuntimeMessage {
@@ -40,7 +41,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
   readonly metadata: EngineMetadataV1 = {
     engineId: "manimgx-browser",
     adapterVersion: ENGINE_ADAPTER_V1,
-    runtimeVersion: "manimgx-0.1.1-pyodide-v314.0.7",
+    runtimeVersion: "manimgx-0.1.1-pyodide-v314.0.7-policy-v2",
     languages: ["python"],
     dialects: ["manimgx-0.1.1"],
     capabilities: {
@@ -117,7 +118,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
   async loadScene(session: ManimGXBrowserSessionV1, context: EngineRequestContextV1, scene: EngineSceneV1): Promise<EngineResult<void>> {
     if (session.disposed) return { ok: false, reason: "unavailable", message: "ManimGX session has been disposed." };
     if (scene.language !== "python" || scene.dialect !== "manimgx-0.1.1") return { ok: false, reason: "invalid-source", message: "ManimGX runtime accepts the manimgx-0.1.1 dialect only." };
-    if (new TextEncoder().encode(scene.source).byteLength > MAX_SOURCE_BYTES) return { ok: false, reason: "invalid-source", message: "Scene source exceeds the 16 KiB runtime limit." };
+    if (new TextEncoder().encode(scene.source).byteLength > MAX_SOURCE_BYTES) return { ok: false, reason: "invalid-source", message: "Scene source exceeds the 256 KiB runtime limit." };
     try { await session.ready; } catch (error) { await session.dispose(); return { ok: false, reason: "unavailable", message: error instanceof Error ? error.message : String(error) }; }
     session.revision += 1;
     session.port.postMessage({ protocol: PROTOCOL, sessionId: session.id, revision: session.revision, requestId: context.requestId, kind: "run", source: scene.source });

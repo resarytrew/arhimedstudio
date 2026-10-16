@@ -249,7 +249,8 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
       canvasPrompt: AI_ENGINE_PROFILES['arhimed-canvas'].instructions,
       gxPrompt: AI_ENGINE_PROFILES['manimgx-browser'].instructions,
       candidate,
-      badImport: validateAiCandidate('import manimgx as m\nimport math\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(1)\n', 'manimgx-browser'),
+      documentedImports: validateAiCandidate('from manimgx import Scene, MathTex\nimport math\n\nclass A(Scene):\n    def construct(self):\n        self.add(MathTex(r"\\\\sin(\\\\pi / 2) =", math.sin(math.pi / 2)))\n        self.wait(1)\n', 'manimgx-browser'),
+      badImport: validateAiCandidate('import manimgx as m\nimport os\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(1)\n', 'manimgx-browser'),
       badNumpy: validateAiCandidate('import manimgx as m\nimport numpy as np\n\nclass A(m.Scene):\n    def construct(self):\n        self.wait(np.math.factorial(3))\n', 'manimgx-browser'),
       badCanvas: validateAiCandidate('import manimx as m\n\nclass A(m.Scene):\n    def construct(self):\n        t = m.ValueTracker(0)\n        self.wait(1)\n', 'arhimed-canvas'),
       cramped: validateAiCandidate('import manimgx as m\n\nclass A(m.Scene):\n    def construct(self):\n        title = m.Text("Очень длинный заголовок, который не помещается в кадр", font_size=64)\n        self.play(m.Write(title), run_time=0.2)\n', 'manimgx-browser'),
@@ -257,11 +258,12 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
     };
   });
   expect(result.canvasPrompt).toContain('Не используй ValueTracker');
-  expect(result.gxPrompt).toContain('ValueTracker и always_redraw разрешены');
+  expect(result.gxPrompt).toContain('полный документированный API ManimGX 0.1.1');
   expect(result.candidate.baseRevision).toBe('r1');
   expect(result.candidate.reply.code).toContain('import manimgx as m');
   expect(result.candidate.reply.code).not.toContain('np.math');
   expect(result.candidate.validation.status).toBe('passed');
+  expect(result.documentedImports.status).not.toBe('rejected');
   expect(result.badImport.status).toBe('rejected');
   expect(result.badNumpy.status).toBe('rejected');
   expect(result.badCanvas.status).toBe('rejected');
