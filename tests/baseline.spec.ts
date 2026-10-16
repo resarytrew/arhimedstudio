@@ -283,3 +283,27 @@ test('AI response parser recovers an escaped Python fence as a candidate revisio
   expect(parsed.code).toContain('import manimgx as m');
   expect(parsed.code).toContain('class Proof(m.Scene):');
 });
+
+test('OpenAI-compatible replies accept content parts, forced SSE, and a full completion endpoint', async ({ page }) => {
+  await page.goto('/');
+  let requestBody: unknown;
+  await page.route('https://example.test/**', async (route) => {
+    requestBody = route.request().postDataJSON();
+    const content = '```python\nimport manimgx as m\n\nclass Reply(m.Scene):\n    def construct(self):\n        self.wait(1)\n```';
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+    });
+  });
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { llmAssistant } = await import('/src/lib/assistant.ts');
+    return llmAssistant(
+      { provider: 'openai-compatible', baseUrl: 'https://example.test/v1/chat/completions/', apiKey: 'test', model: 'test-model', rememberKey: false },
+      [], 'Сделай сцену', '', undefined, 'system', 100,
+    );
+  });
+  expect(requestBody).toMatchObject({ stream: false });
+  expect(result.code).toContain('class Reply(m.Scene)');
+});

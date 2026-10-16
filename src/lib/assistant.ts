@@ -40,15 +40,57 @@ export function parseAssistantContent(content: string): AssistantReply {
   }
 
   // Last-resort recovery for providers that omit fences but do return a complete scene.
-  const sourceStart = normalized.search(/^\s*import\s+(?:manimx|manimgx)\s+as\s+m\b/m);
+  const sourceStart = normalized.search(/^\s*(?:import\s+(?:manimx|manimgx)(?:\s+as\s+\w+)?\b|from\s+manimgx(?:\.\w+)*\s+import\s+)/m);
   if (sourceStart >= 0) {
     const source = normalized.slice(sourceStart).trim();
-    if (/class\s+\w+\s*\(\s*m\.Scene\s*\)\s*:/.test(source)) {
+    if (/class\s+\w+\s*\(\s*(?:(?:m|manimgx)\.Scene|Scene)\s*\)\s*:/.test(source)) {
       const text = normalized.slice(0, sourceStart).trim() || "Готово — подготовил кандидатную ревизию.";
       return { text, code: source + "\n" };
     }
   }
   return { text: normalized.trim() || "Провайдер не вернул содержательный ответ." };
+}
+
+function completionUrl(baseUrl: string) {
+  const normalized = baseUrl.trim().replace(/\/+$/, "");
+  if (!normalized) throw new Error("Укажите адрес OpenAI-совместимого API.");
+  return /\/chat\/completions$/i.test(normalized) ? normalized : `${normalized}/chat/completions`;
+}
+
+function textContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(textContent).join("");
+  if (!value || typeof value !== "object") return "";
+  const part = value as { text?: unknown; content?: unknown };
+  return textContent(part.text) || textContent(part.content);
+}
+
+/** Accept the stable chat-completions shape and the text-part variants returned by compatible APIs. */
+function providerContent(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const response = payload as {
+    choices?: { message?: { content?: unknown }; delta?: { content?: unknown }; text?: unknown }[];
+    output?: { content?: unknown }[];
+  };
+  const choice = response.choices?.[0];
+  return textContent(choice?.message?.content) || textContent(choice?.delta?.content) || textContent(choice?.text)
+    || response.output?.map((item) => textContent(item.content)).join("") || "";
+}
+
+function decodeProviderResponse(raw: string): unknown {
+  const body = raw.replace(/^\uFEFF/, "").trim();
+  try { return JSON.parse(body); } catch {
+    // A few OpenAI-compatible gateways send Server-Sent Events even when stream=false.
+    const events = body.split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim())
+      .filter((data) => data && data !== "[DONE]");
+    if (!events.length) throw new Error("Провайдер вернул не JSON. Проверьте адрес API: ожидается базовый URL вида …/v1 или полный …/chat/completions.");
+    const decoded = events.map((event) => JSON.parse(event));
+    const content = decoded.map(providerContent).join("");
+    if (!content) throw new Error("Провайдер вернул поток без текстового ответа.");
+    return { choices: [{ message: { content } }] };
+  }
 }
 
 const COLOR_WORDS: [RegExp, string, string][] = [
@@ -271,7 +313,7 @@ export async function llmAssistant(
   if (settings.provider === "offline") throw new Error("Выбран офлайн-ассистент.");
   if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
   if (prompt.length > 4_000 || currentCode.length > 65_536) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
-  const url = settings.baseUrl.replace(/\/$/, "") + "/chat/completions";
+  const url = completionUrl(settings.baseUrl);
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -283,6 +325,7 @@ export async function llmAssistant(
       model: settings.model,
       temperature: 0.4,
       max_tokens: maxOutputTokens,
+      stream: false,
       messages: [
         { role: "system", content: systemPrompt },
         ...history,
@@ -300,9 +343,8 @@ export async function llmAssistant(
     const t = await res.text();
     throw new Error(`Ошибка API (${res.status}): ${t.slice(0, 200)}`);
   }
-  let data: unknown;
-  try { data = await res.json(); } catch { throw new Error("Провайдер вернул повреждённый ответ."); }
-  const content: string = (data as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content as string ?? "";
-  if (!content || typeof content !== "string") throw new Error("Провайдер не вернул текст ответа.");
+  const data = decodeProviderResponse(await res.text());
+  const content = providerContent(data);
+  if (!content) throw new Error("Провайдер вернул ответ без текста. Проверьте выбранную модель и совместимость API.");
   return parseAssistantContent(content);
 }
