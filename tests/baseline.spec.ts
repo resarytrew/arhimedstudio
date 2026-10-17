@@ -379,3 +379,28 @@ test('hosted assistant normalizes an otherwise valid candidate that slightly exc
   expect(result.code).toContain('run_time=2.06');
   expect(result.code).toContain('self.wait(1.16)');
 });
+
+test('provider API errors embedded in a successful envelope are shown without exposing request data', async ({ page }) => {
+  await page.goto('/');
+  await page.route('https://example.test/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: 'request-id', error: { code: 'model_not_found', message: 'Model is not available for this API key.' } }),
+  }));
+  const error = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { llmAssistant } = await import('/src/lib/assistant.ts');
+    try {
+      await llmAssistant(
+        { provider: 'openai-compatible', baseUrl: 'https://example.test/v1', apiKey: 'do-not-expose', model: 'test-model', rememberKey: false },
+        [], 'Сделай сцену', '', undefined, 'system', 100,
+      );
+    } catch (value) {
+      return String(value);
+    }
+    return '';
+  });
+  expect(error).toContain('model_not_found');
+  expect(error).toContain('Model is not available');
+  expect(error).not.toContain('do-not-expose');
+});

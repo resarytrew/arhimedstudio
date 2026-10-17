@@ -112,6 +112,22 @@ function providerResponseSummary(payload: unknown): string {
   return `поля ответа: ${keys}${reason}${refusal}${tools}`;
 }
 
+/** Some compatible gateways put an API error in a successful HTTP envelope. */
+function providerErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
+  const error = (payload as { error?: unknown }).error;
+  if (typeof error === "string") return error.slice(0, 320);
+  if (!error || typeof error !== "object" || Array.isArray(error)) return "";
+  const details = error as { message?: unknown; detail?: unknown; code?: unknown; type?: unknown };
+  const message = typeof details.message === "string"
+    ? details.message
+    : typeof details.detail === "string"
+      ? details.detail
+      : "";
+  const labels = [typeof details.code === "string" || typeof details.code === "number" ? String(details.code) : "", typeof details.type === "string" ? details.type : ""].filter(Boolean);
+  return [labels.join(" / "), message].filter(Boolean).join(": ").slice(0, 320);
+}
+
 function decodeProviderResponse(raw: string): unknown {
   const body = raw.replace(/^\uFEFF/, "").trim();
   try { return JSON.parse(body); } catch {
@@ -385,6 +401,8 @@ export async function llmAssistant(
   }
   const data = decodeProviderResponse(await res.text());
   const content = providerContent(data);
+  const providerError = providerErrorMessage(data);
+  if (providerError) throw new Error(`Ошибка провайдера: ${providerError}`);
   if (!content) throw new Error(`Провайдер вернул ответ без текста (${providerResponseSummary(data)}). Проверьте модель или пришлите эту диагностику разработчику.`);
   const reply = parseAssistantContent(content);
   // Hosted models occasionally miss the timing budget by a few tenths of a second.
