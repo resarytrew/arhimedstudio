@@ -61,20 +61,37 @@ function textContent(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(textContent).join("");
   if (!value || typeof value !== "object") return "";
-  const part = value as { text?: unknown; content?: unknown };
-  return textContent(part.text) || textContent(part.content);
+  const part = value as { text?: unknown; content?: unknown; value?: unknown; output_text?: unknown };
+  return textContent(part.text) || textContent(part.content) || textContent(part.value) || textContent(part.output_text);
 }
 
-/** Accept the stable chat-completions shape and the text-part variants returned by compatible APIs. */
+/**
+ * Accept the chat-completions response plus the response envelopes commonly returned by
+ * OpenAI-compatible gateways.  In particular, some gateways proxy Responses API output,
+ * Gemini's `candidates[].content.parts`, or wrap the completion in `data`/`result`.
+ */
 function providerContent(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const response = payload as {
-    choices?: { message?: { content?: unknown }; delta?: { content?: unknown }; text?: unknown }[];
-    output?: { content?: unknown }[];
+    choices?: { message?: { content?: unknown }; delta?: { content?: unknown }; text?: unknown; content?: unknown }[];
+    output?: { content?: unknown; text?: unknown }[];
+    output_text?: unknown;
+    candidates?: { content?: { parts?: unknown }; text?: unknown }[];
+    result?: { alternatives?: { message?: { text?: unknown; content?: unknown }; text?: unknown }[] };
+    message?: { content?: unknown; text?: unknown };
+    response?: unknown;
+    generated_text?: unknown;
+    data?: unknown;
   };
   const choice = response.choices?.[0];
-  return textContent(choice?.message?.content) || textContent(choice?.delta?.content) || textContent(choice?.text)
-    || response.output?.map((item) => textContent(item.content)).join("") || "";
+  const content = textContent(choice?.message?.content) || textContent(choice?.delta?.content) || textContent(choice?.content) || textContent(choice?.text)
+    || textContent(response.output_text)
+    || response.output?.map((item) => textContent(item.content) || textContent(item.text)).join("")
+    || response.candidates?.map((candidate) => textContent(candidate.content?.parts) || textContent(candidate.text)).join("")
+    || response.result?.alternatives?.map((alternative) => textContent(alternative.message?.text) || textContent(alternative.message?.content) || textContent(alternative.text)).join("")
+    || textContent(response.message?.content) || textContent(response.message?.text)
+    || textContent(response.response) || textContent(response.generated_text);
+  return content || (response.data && response.data !== payload ? providerContent(response.data) : "");
 }
 
 function decodeProviderResponse(raw: string): unknown {

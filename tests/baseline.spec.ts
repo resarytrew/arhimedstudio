@@ -334,3 +334,26 @@ test('OpenAI-compatible replies accept content parts, forced SSE, and a full com
   expect(requestBody).toMatchObject({ stream: false });
   expect(result.code).toContain('class Reply(m.Scene)');
 });
+
+test('provider reply parser accepts Responses API, Gemini gateway, and wrapped completion envelopes', async ({ page }) => {
+  await page.goto('/');
+  const code = '```python\nimport manimgx as m\n\nclass Reply(m.Scene):\n    def construct(self):\n        self.wait(1)\n```';
+  const fixtures: Record<string, unknown> = {
+    responses: { output_text: code },
+    gemini: { candidates: [{ content: { parts: [{ text: code }] } }] },
+    wrapped: { data: { result: { alternatives: [{ message: { text: code } }] } } },
+  };
+  await page.route('https://example.test/**', async (route) => {
+    const body = route.request().postDataJSON() as { model: string };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixtures[body.model]) });
+  });
+  const results = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { llmAssistant } = await import('/src/lib/assistant.ts');
+    return Promise.all(['responses', 'gemini', 'wrapped'].map((model) => llmAssistant(
+      { provider: 'openai-compatible', baseUrl: 'https://example.test/v1', apiKey: 'test', model, rememberKey: false },
+      [], 'Сделай сцену', '', undefined, 'system', 100,
+    )));
+  });
+  for (const result of results) expect(result.code).toContain('class Reply(m.Scene)');
+});
