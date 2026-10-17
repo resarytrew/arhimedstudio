@@ -61,14 +61,15 @@ function textContent(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(textContent).join("");
   if (!value || typeof value !== "object") return "";
-  const part = value as { text?: unknown; content?: unknown; value?: unknown; output_text?: unknown };
-  return textContent(part.text) || textContent(part.content) || textContent(part.value) || textContent(part.output_text);
+  const part = value as { text?: unknown; content?: unknown; value?: unknown; output_text?: unknown; parts?: unknown };
+  return textContent(part.text) || textContent(part.content) || textContent(part.value) || textContent(part.output_text) || textContent(part.parts);
 }
 
 /**
  * Accept the chat-completions response plus the response envelopes commonly returned by
  * OpenAI-compatible gateways.  In particular, some gateways proxy Responses API output,
- * Gemini's `candidates[].content.parts`, or wrap the completion in `data`/`result`.
+ * Gemini's `candidates[].content.parts`, native `content`/`outputs`, or wrap the
+ * completion in `data`/`result`.
  */
 function providerContent(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -81,6 +82,10 @@ function providerContent(payload: unknown): string {
     message?: { content?: unknown; text?: unknown };
     response?: unknown;
     generated_text?: unknown;
+    content?: unknown;
+    outputs?: unknown;
+    answer?: unknown;
+    completion?: unknown;
     data?: unknown;
   };
   const choice = response.choices?.[0];
@@ -90,8 +95,21 @@ function providerContent(payload: unknown): string {
     || response.candidates?.map((candidate) => textContent(candidate.content?.parts) || textContent(candidate.text)).join("")
     || response.result?.alternatives?.map((alternative) => textContent(alternative.message?.text) || textContent(alternative.message?.content) || textContent(alternative.text)).join("")
     || textContent(response.message?.content) || textContent(response.message?.text)
-    || textContent(response.response) || textContent(response.generated_text);
+    || textContent(response.content) || textContent(response.outputs)
+    || textContent(response.response) || textContent(response.generated_text)
+    || textContent(response.answer) || textContent(response.completion);
   return content || (response.data && response.data !== payload ? providerContent(response.data) : "");
+}
+
+function providerResponseSummary(payload: unknown): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "неизвестная структура";
+  const response = payload as { choices?: { finish_reason?: unknown; message?: { refusal?: unknown; tool_calls?: unknown } }[] };
+  const keys = Object.keys(response).slice(0, 8).join(", ") || "нет полей";
+  const choice = response.choices?.[0];
+  const reason = typeof choice?.finish_reason === "string" ? `; причина завершения: ${choice.finish_reason}` : "";
+  const refusal = choice?.message?.refusal ? "; модель отказалась сформировать ответ" : "";
+  const tools = choice?.message?.tool_calls ? "; модель вернула вызов инструмента вместо текста" : "";
+  return `поля ответа: ${keys}${reason}${refusal}${tools}`;
 }
 
 function decodeProviderResponse(raw: string): unknown {
@@ -367,6 +385,6 @@ export async function llmAssistant(
   }
   const data = decodeProviderResponse(await res.text());
   const content = providerContent(data);
-  if (!content) throw new Error("Провайдер вернул ответ без текста. Проверьте выбранную модель и совместимость API.");
+  if (!content) throw new Error(`Провайдер вернул ответ без текста (${providerResponseSummary(data)}). Проверьте модель или пришлите эту диагностику разработчику.`);
   return parseAssistantContent(content);
 }
