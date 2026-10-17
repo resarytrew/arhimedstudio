@@ -6,13 +6,10 @@ import { IconBtn, Panel } from "../components/Panel";
 import { Player, type PlayerHandle } from "../components/Player";
 import { ManimGXPreview } from "../components/ManimGXPreview";
 import { SettingsModal } from "../components/SettingsModal";
-import { LessonWorkspace } from "../components/LessonWorkspace";
 import { Sidebar, type PanelId } from "../components/Sidebar";
 import type { Timeline } from "../engine/interpreter";
 import { loadEngineFonts } from "../engine/fonts";
 import type { LLMSettings } from "../lib/assistant";
-import { encryptProject, decryptProject, publicLessonBundle } from "../lib/secure-bundle";
-import { lessonContext, type LessonPlan } from "../lib/lesson";
 import { WELCOME_CODE } from "../lib/templates";
 import { aiOrchestrator } from "../ai/orchestrator";
 import type { AiCandidateValidationV1 } from "../ai/validation";
@@ -20,20 +17,15 @@ import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
 import {
   ACTIVE_KEY,
   acceptAiCandidate,
-  addSecurityEvent,
   activeScene,
   addAiCandidate,
   initialActiveProjectId,
   initialLLM,
   initialProjects,
-  importProjectAsLocalCopy,
   LLM_KEY,
   newProject,
-  markRevisionRuntimeVerified,
   PROJECTS_KEY,
   setActiveSceneEngine,
-  clearSecurityLog,
-  updateLesson,
   uid,
   updateSceneSource,
   usePersistent,
@@ -76,12 +68,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const rightRef = useRef<HTMLDivElement>(null);
 
   const [settings, setSettings] = useState(false);
-  const [lessonWorkspace, setLessonWorkspace] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [recording, setRecording] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
-  const verifiedCandidateIds = useRef(new Set<string>());
   const playerRef = useRef<PlayerHandle>(null);
   const previewSurfaceRef = useRef<HTMLDivElement>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
@@ -107,20 +97,18 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const scene = activeScene(active);
   const code = active?.code ?? "";
+  const hasSceneSource = scene.source.trim().length > 0;
+  const visibleTimeline = scene.engineId === "arhimed-canvas" && hasSceneSource ? timeline : null;
+  const visibleError = scene.engineId === "arhimed-canvas" && hasSceneSource ? error : null;
   const reviewCandidate = reviewCandidateId && active
     ? scene.revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
     : undefined;
-  /** Reviewing executes an isolated copy only; accepting remains a separate author action. */
-  const previewScene = reviewCandidate ? { ...scene, source: reviewCandidate.source, currentRevision: reviewCandidate.id } : scene;
-  const previewFingerprint = `${active?.id ?? ""}:${previewScene.id}:${previewScene.currentRevision}:${previewScene.source}`;
   const displayedCode = reviewCandidate?.source ?? code;
-  const hasSceneSource = previewScene.source.trim().length > 0;
-  const visibleTimeline = previewScene.engineId === "arhimed-canvas" && hasSceneSource ? timeline : null;
-  const visibleError = previewScene.engineId === "arhimed-canvas" && hasSceneSource ? error : null;
+
   // Canvas stays the default engine, now through EngineAdapterV1 rather than a universal scene format.
   useEffect(() => {
     if (!fontsReady || !active) return;
-    const scene = previewScene;
+    const scene = activeScene(active);
     // A project switch must not leak the previous scene's frame or diagnostics.
     setTimeline(null);
     setError(null);
@@ -145,16 +133,12 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         if (loaded.ok) {
           setTimeline(loaded.value);
           setError(null);
-          if (!reviewCandidate) lastGood.current = code;
-          if (reviewCandidate && !verifiedCandidateIds.current.has(reviewCandidate.id)) {
-            verifiedCandidateIds.current.add(reviewCandidate.id);
-            updateProject(active.id, (project) => addSecurityEvent(markRevisionRuntimeVerified(project, reviewCandidate.id, "Canvas preview completed successfully."), "runtime-verified", "ИИ-кандидат проверен локальным Canvas-превью."));
-          }
+          lastGood.current = code;
         } else setError(diagnostic ?? { msg: loaded.message, line: 0 });
       })();
     }, 350);
     return () => { current = false; clearTimeout(id); };
-  }, [previewFingerprint, fontsReady, reviewCandidate?.id]);
+  }, [active, code, fontsReady]);
 
   const showToast = useCallback((t: string) => {
     setToast(t);
@@ -202,10 +186,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     const projectId = active.id;
     const scene = activeScene(active);
     const baseRevision = scene.currentRevision;
-    const history = llm.shareHistory ? active.messages.map((m) => ({ role: m.role, content: m.text })) : [];
-    const planContext = lessonContext(active.lesson ?? { version: 1, goal: "", audience: "", outcome: "", steps: [], formulas: [], parameters: [], checkpoints: [], questions: [], publicSummary: "" });
-    const requestPrompt = planContext ? `${text}\n\nРабочий план урока (явно сохранён автором):\n${planContext}` : text;
-    updateProject(projectId, (project) => addSecurityEvent({ ...project, messages: [...project.messages, { id: uid(), role: "user", text, ts: Date.now() }], updatedAt: Date.now() }, "ai-request", llm.provider === "offline" ? "Офлайн-ассистент: запрос не покидал устройство." : `Внешний ИИ: отправлены активная сцена и запрос${llm.shareHistory ? "; автор включил историю." : "; история не передавалась."}`));
+    const history = active.messages.map((m) => ({ role: m.role, content: m.text }));
+    updateProject(projectId, (project) => ({ ...project, messages: [...project.messages, { id: uid(), role: "user", text, ts: Date.now() }], updatedAt: Date.now() }));
     setThinking(true);
     let reply: { text: string; code?: string; title?: string; error?: boolean };
     let validation: AiCandidateValidationV1 | undefined;
@@ -215,7 +197,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         engine: scene.engineId === "manimgx-browser" ? "manimgx-browser" : "arhimed-canvas",
         settings: llm,
         history,
-        prompt: requestPrompt,
+        prompt: text,
         source: scene.source,
         baseRevision,
       });
@@ -243,8 +225,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           };
           reply = { ...reply, code: undefined, text: `${reply.text}\n\nКандидат не добавлен: исходная сцена уже изменилась.` };
         } else {
-          const created = addAiCandidate(project, reply.code, baseRevision, validation?.status === "passed" ? "validated" : "draft");
-          next = addSecurityEvent(created.project, "candidate-created", "ИИ-кандидат создан; для доверенного статуса требуется отдельный запуск превью.");
+          const created = addAiCandidate(project, reply.code, baseRevision);
+          next = created.project;
           candidateRevision = created.candidate.id;
         }
       }
@@ -288,16 +270,6 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         }
       );
     } else showToast("Проверьте строку " + error.line);
-  };
-
-  const explainDiagnostic = (detail: string, line = 0) => {
-    pushMessage({ id: uid(), role: "assistant", text: `Диагностика${line ? `, строка ${line}` : ""}: ${detail}\n\nКод не изменён. Проверьте аргументы вызова и применяйте только отдельную кандидатную ревизию.`, ts: Date.now() });
-    restorePanel("chat");
-  };
-  const rollbackLastGood = () => {
-    if (!lastGood.current || lastGood.current === code) { showToast("Нет отдельной последней рабочей версии для отката."); return; }
-    setCode(lastGood.current);
-    showToast("Восстановлена последняя рабочая версия превью.");
   };
 
   const newVideo = () => {
@@ -348,14 +320,6 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     a.download = `${(timeline?.sceneName ?? "scene").toLowerCase()}.py`;
     a.click();
   };
-  const downloadText = (contents: string, filename: string, type = "application/json") => {
-    const blob = new Blob([contents], { type });
-    const anchor = document.createElement("a");
-    anchor.href = URL.createObjectURL(blob);
-    anchor.download = filename;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(anchor.href), 0);
-  };
 
   // splitters
   const dragH = (e: RPointerEvent) => {
@@ -390,7 +354,6 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   };
 
   const modeLabel = llm.provider === "offline" ? "Офлайн-ассистент" : `ИИ: ${llm.model}`;
-  const candidateDiffLines = reviewCandidate ? Math.max(reviewCandidate.source.split("\n").length, code.split("\n").length) - reviewCandidate.source.split("\n").filter((line, index) => line === code.split("\n")[index]).length : 0;
 
   const show = (id: PanelId) => !hidden.includes(id) && (!maxed || maxed === id);
 
@@ -407,7 +370,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             showToast("Кандидат нельзя применить: исходная ревизия сцены изменилась.");
             return;
           }
-          updateProject(active.id, () => addSecurityEvent(accepted.project, "candidate-accepted", "Автор явно принял ИИ-кандидат после просмотра."));
+          updateProject(active.id, () => accepted.project);
           setReviewCandidateId(null);
           restorePanel("preview");
           restorePanel("code");
@@ -459,13 +422,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       bodyClassName="bg-black"
     >
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative h-full bg-black">
-        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : previewScene.engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={previewScene} onDiagnostic={setRuntimeError} onRendered={(durationMs) => {
-          if (reviewCandidate && !verifiedCandidateIds.current.has(reviewCandidate.id)) {
-            verifiedCandidateIds.current.add(reviewCandidate.id);
-            updateProject(active.id, (project) => addSecurityEvent(markRevisionRuntimeVerified(project, reviewCandidate.id, `Isolated ManimGX preview completed in ${durationMs} ms.`), "runtime-verified", "ИИ-кандидат проверен изолированным ManimGX runtime."));
-          }
-        }} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
-        {previewScene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
+        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
+        {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
               <div className="mb-3 text-[10.5px] font-medium uppercase tracking-[0.18em] text-slate-500">Подготовка превью</div>
@@ -484,17 +442,27 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
               <div className="font-medium">Ошибка{visibleError.line ? ` в строке ${visibleError.line}` : ""}</div>
               <div className="truncate opacity-80">{visibleError.msg}</div>
             </div>
-            <div className="flex shrink-0 gap-1.5"><button onClick={() => explainDiagnostic(visibleError.msg, visibleError.line)} className="rounded-lg bg-white px-2 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100">Объяснить</button><button onClick={rollbackLastGood} className="rounded-lg bg-white px-2 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100">Откат</button><button onClick={fixError} className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"><Wand2 size={13} /> ИИ</button></div>
+            <button
+              onClick={fixError}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
+            >
+            <Wand2 size={13} /> Исправить с ИИ
+            </button>
           </div>
         )}
-        {previewScene.engineId === "manimgx-browser" && runtimeError && (
+        {scene.engineId === "manimgx-browser" && runtimeError && (
           <div className="fade-up absolute inset-x-3 top-3 flex items-start gap-3 rounded-xl bg-red-50/95 px-3.5 py-2.5 text-[12.5px] text-red-700 shadow-lg ring-1 ring-red-200 backdrop-blur dark:bg-red-950/90 dark:text-red-200 dark:ring-red-500/30">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="font-medium">Ошибка ManimGX</div>
               <div className="truncate opacity-80">{runtimeError}</div>
             </div>
-            <div className="flex shrink-0 gap-1.5"><button onClick={() => explainDiagnostic(runtimeError)} className="rounded-lg bg-white px-2 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100">Объяснить</button><button onClick={() => repairWithAi(runtimeError)} className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"><Wand2 size={13} /> ИИ</button></div>
+            <button
+              onClick={() => repairWithAi(runtimeError)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
+            >
+              <Wand2 size={13} /> Исправить с ИИ
+            </button>
           </div>
         )}
         {recording !== null && (
@@ -523,13 +491,13 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         <>
           {reviewCandidate && (
             <>
-              <span className={cn("hidden rounded-full px-2 py-0.5 text-[11px] font-medium sm:block", reviewCandidate.trustState === "runtime-verified" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300")}>{reviewCandidate.trustState === "runtime-verified" ? "Превью проверено" : "Проверка превью…"}</span>
+              <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 sm:block dark:bg-amber-500/10 dark:text-amber-300">Не применён</span>
               <button
                 onClick={() => {
                   if (!active) return;
                   const accepted = acceptAiCandidate(active, reviewCandidate.id);
                   if (!accepted) { showToast("Кандидат нельзя применить: исходная ревизия сцены изменилась."); return; }
-                  updateProject(active.id, () => addSecurityEvent(accepted.project, "candidate-accepted", "Автор явно принял ИИ-кандидат после просмотра."));
+                  updateProject(active.id, () => accepted.project);
                   setReviewCandidateId(null);
                   restorePanel("preview");
                   showToast("Кандидатная ревизия принята: запускаю новое превью.");
@@ -568,7 +536,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         </>
       }
     >
-          {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ: изменено строк ≈ {candidateDiffLines}. В превью выполняется только временная копия; исходник будет заменён лишь после «Применить».</div>}
+          {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
           <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
     </Panel>
   );
@@ -595,7 +563,6 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         dark={dark}
         onToggleTheme={onToggleTheme}
         onSettings={() => setSettings(true)}
-        onOpenLesson={() => setLessonWorkspace(true)}
         onHome={onHome}
         onToast={showToast}
         engineId={scene.engineId}
@@ -643,34 +610,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           value={llm}
           onClose={() => setSettings(false)}
           onSave={(v) => {
-            setLlmPreferences({ provider: v.provider, baseUrl: v.baseUrl, model: v.model, rememberKey: v.rememberKey, shareHistory: !!v.shareHistory });
+            setLlmPreferences({ provider: v.provider, baseUrl: v.baseUrl, model: v.model, rememberKey: v.rememberKey });
             setApiKey(v.apiKey);
             setSettings(false);
             showToast(v.provider !== "offline" && v.apiKey ? `Подключена модель ${v.model}` : "Включён офлайн-ассистент");
-          }}
-        />
-      )}
-
-      {lessonWorkspace && active && (
-        <LessonWorkspace
-          project={active}
-          onClose={() => setLessonWorkspace(false)}
-          onUpdate={(lesson: LessonPlan, progress) => updateProject(active.id, (project) => updateLesson(project, lesson, progress))}
-          onClearLog={() => updateProject(active.id, (project) => clearSecurityLog(project))}
-          onExportSecure={async (password) => {
-            const snapshot = addSecurityEvent(active, "export", "Создан зашифрованный локальный резервный пакет.");
-            updateProject(active.id, () => snapshot);
-            downloadText(await encryptProject(snapshot, password), `${active.title || "arhimed"}.arhimed`, "application/vnd.arhimed.encrypted+json");
-          }}
-          onExportPublic={() => {
-            const snapshot = addSecurityEvent(active, "export", "Создан публичный пакет без чата, аудита и ответов ученика.");
-            updateProject(active.id, () => snapshot);
-            downloadText(publicLessonBundle(snapshot), `${active.title || "lesson"}.lesson.json`);
-          }}
-          onImportSecure={async (serialized, password) => {
-            const restored = addSecurityEvent(importProjectAsLocalCopy(await decryptProject(serialized, password)), "import", "Зашифрованный пакет восстановлен как недоверенная локальная копия.");
-            setProjects((items) => [restored, ...items]);
-            setActiveId(restored.id);
           }}
         />
       )}

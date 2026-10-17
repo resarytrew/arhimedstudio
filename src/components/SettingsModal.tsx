@@ -78,15 +78,6 @@ export function SettingsModal({ value, onSave, onClose }: Props) {
             <p className="text-[11.5px] leading-relaxed text-slate-500">
               Ключ хранится только в памяти этой вкладки. Он не входит в проекты, ревизии, логи, runtime сцен или опубликованные материалы.
             </p>
-            <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={!!v.shareHistory}
-                onChange={(event) => setV({ ...v, shareHistory: event.target.checked })}
-                className="mt-0.5"
-              />
-              <span><b>Передавать историю диалога.</b> По умолчанию наружу отправляются только текущий запрос и активная сцена. Включайте это лишь если история действительно нужна модели.</span>
-            </label>
           </div>
         ) : (
           <p className="mt-5 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400">

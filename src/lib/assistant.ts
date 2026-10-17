@@ -13,8 +13,6 @@ export interface LLMSettings {
   apiKey: string;
   model: string;
   rememberKey: boolean;
-  /** Explicit opt-in. External providers receive only prompt + active source by default. */
-  shareHistory?: boolean;
 }
 
 export interface LLMPreferences extends Omit<LLMSettings, "apiKey"> {}
@@ -24,7 +22,6 @@ export const DEFAULT_LLM_PREFERENCES: LLMPreferences = {
   baseUrl: "https://api.openai.com/v1",
   model: "gpt-4o-mini",
   rememberKey: false,
-  shareHistory: false,
 };
 
 export const DEFAULT_LLM: LLMSettings = { ...DEFAULT_LLM_PREFERENCES, apiKey: "" };
