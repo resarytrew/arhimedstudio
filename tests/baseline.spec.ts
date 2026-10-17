@@ -404,3 +404,22 @@ test('provider API errors embedded in a successful envelope are shown without ex
   expect(error).toContain('Model is not available');
   expect(error).not.toContain('do-not-expose');
 });
+
+test('OpenRouter uses a completion-token budget with low reasoning effort', async ({ page }) => {
+  await page.goto('/');
+  let requestBody: unknown;
+  await page.route('https://example.test/**', async (route) => {
+    requestBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'Готово.' } }] }) });
+  });
+  await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { llmAssistant } = await import('/src/lib/assistant.ts');
+    await llmAssistant(
+      { provider: 'openrouter', baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'test-model', rememberKey: false },
+      [], 'Сделай сцену', '', undefined, 'system', 6_000,
+    );
+  });
+  expect(requestBody).toMatchObject({ max_completion_tokens: 8192, reasoning: { effort: 'low' } });
+  expect(requestBody).not.toHaveProperty('max_tokens');
+});

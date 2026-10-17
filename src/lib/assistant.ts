@@ -128,6 +128,12 @@ function providerErrorMessage(payload: unknown): string {
   return [labels.join(" / "), message].filter(Boolean).join(": ").slice(0, 320);
 }
 
+function providerEndedByLength(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const choice = (payload as { choices?: { finish_reason?: unknown }[] }).choices?.[0];
+  return choice?.finish_reason === "length";
+}
+
 function decodeProviderResponse(raw: string): unknown {
   const body = raw.replace(/^\uFEFF/, "").trim();
   try { return JSON.parse(body); } catch {
@@ -370,6 +376,10 @@ export async function llmAssistant(
   if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
   if (prompt.length > 4_000 || currentCode.length > 65_536) throw new Error("Запрос или исходник превышает безопасный лимит контекста.");
   const url = completionUrl(settings.baseUrl);
+  const completionLimit = settings.provider === "openrouter" ? Math.max(maxOutputTokens, 8_192) : maxOutputTokens;
+  const providerOptions = settings.provider === "openrouter"
+    ? { max_completion_tokens: completionLimit, reasoning: { effort: "low" } }
+    : { max_tokens: completionLimit };
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -380,7 +390,7 @@ export async function llmAssistant(
     body: JSON.stringify({
       model: settings.model,
       temperature: 0.4,
-      max_tokens: maxOutputTokens,
+      ...providerOptions,
       stream: false,
       messages: [
         { role: "system", content: systemPrompt },
@@ -403,6 +413,9 @@ export async function llmAssistant(
   const content = providerContent(data);
   const providerError = providerErrorMessage(data);
   if (providerError) throw new Error(`Ошибка провайдера: ${providerError}`);
+  if (!content && providerEndedByLength(data)) {
+    throw new Error("Модель исчерпала лимит вывода до текстового ответа. Выберите обычную (не reasoning) модель или повторите запрос с более коротким исходным кодом.");
+  }
   if (!content) throw new Error(`Провайдер вернул ответ без текста (${providerResponseSummary(data)}). Проверьте модель или пришлите эту диагностику разработчику.`);
   const reply = parseAssistantContent(content);
   // Hosted models occasionally miss the timing budget by a few tenths of a second.
