@@ -85,17 +85,45 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
   if (diagnostics.length) return { status: "rejected", engineId, diagnostics };
   if (source.split("\n").length > 260) warnings.push({ message: "Сцена длиннее 260 строк: проверьте её по частям перед применением." });
   const playCount = (source.match(/self\.play\s*\(/g) ?? []).length;
+  const explicitRunTimeCount = (source.match(/run_time\s*=/g) ?? []).length;
+  const implicitDurationLines = source
+    .split("\n")
+    .filter((line) => /self\.play\s*\(/.test(line) && !/run_time\s*=/.test(line));
+  for (const line of implicitDurationLines) {
+    diagnostics.push({
+      line: source.indexOf(line) >= 0 ? source.slice(0, source.indexOf(line)).split("\n").length : undefined,
+      message: "У каждого self.play должен быть явный run_time в той же строке: это нужно для ролика длительностью 7–10 секунд.",
+    });
+  }
+  const implicitWaitLines = source
+    .split("\n")
+    .filter((line) => /self\.wait\s*\(\s*\)/.test(line));
+  for (const line of implicitWaitLines) {
+    diagnostics.push({
+      line: source.indexOf(line) >= 0 ? source.slice(0, source.indexOf(line)).split("\n").length : undefined,
+      message: "У каждого self.wait должно быть явное число секунд: это нужно для ролика длительностью 7–10 секунд.",
+    });
+  }
+  if (/\b(?:run_time|self\.wait)\s*=\s*-|self\.wait\s*\(\s*-/.test(source)) {
+    diagnostics.push({ message: "Длительность run_time и self.wait должна быть положительным числом." });
+  }
+  if (explicitRunTimeCount < playCount && !implicitDurationLines.length) {
+    diagnostics.push({ message: "Для каждого self.play укажите ровно один явный run_time, чтобы проверить длительность ролика." });
+  }
   if (!playCount) warnings.push({ message: "Не найден self.play(...): сцена может оказаться статичной." });
-  else if (playCount < 5) warnings.push({ message: `Найдено только ${playCount} этапа анимации. Для учебной сцены добавьте построение, наблюдение и вывод.` });
+  else if (playCount < 4 || playCount > 6) warnings.push({ message: `Найдено ${playCount} этапа анимации. Для короткого ролика предпочтительны 4–6 этапов.` });
 
   const explicitRunTimes = [...source.matchAll(/run_time\s*=\s*(\d+(?:\.\d+)?)/g)].reduce((total, match) => total + Number(match[1]), 0);
   const waits = [...source.matchAll(/self\.wait\s*\(\s*(\d+(?:\.\d+)?)?\s*\)/g)].reduce((total, match) => total + Number(match[1] ?? 1), 0);
-  const estimatedDuration = explicitRunTimes + waits + Math.max(0, playCount - (source.match(/run_time\s*=/g) ?? []).length);
-  if (playCount && estimatedDuration < 12) warnings.push({ message: `Оценочная длительность ${estimatedDuration.toFixed(1)} с меньше рекомендуемых 12 с. Добавьте содержательные этапы и паузы.` });
+  const estimatedDuration = explicitRunTimes + waits + Math.max(0, playCount - explicitRunTimeCount);
+  if (playCount && (estimatedDuration < 7 || estimatedDuration > 10)) {
+    diagnostics.push({ message: `Оценочная длительность ${estimatedDuration.toFixed(1)} с выходит за диапазон 7–10 с. Скорректируйте run_time и self.wait.` });
+  }
 
   const longText = /m\.(?:Text|Tex)\(\s*["']([^"']{43,})["']/g;
   for (let match = longText.exec(source); match; match = longText.exec(source)) {
     warnings.push({ line: source.slice(0, match.index).split("\n").length, message: "Длинная текстовая подпись может не поместиться в кадр; сократите её или разбейте на строки." });
   }
+  if (diagnostics.length) return { status: "rejected", engineId, diagnostics };
   return { status: warnings.length ? "warning" : "passed", engineId, diagnostics: warnings };
 }

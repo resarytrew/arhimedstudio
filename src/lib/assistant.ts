@@ -123,6 +123,19 @@ function modifySpeed(code: string, factor: number) {
     .join("\n");
 }
 
+/** Keep offline-created scenes aligned with the same 7–10 second contract as the hosted assistant. */
+function estimatedDuration(code: string): number {
+  const plays = (code.match(/self\.play\s*\(/g) ?? []).length;
+  const explicit = [...code.matchAll(/run_time\s*=\s*(\d+(?:\.\d+)?)/g)].reduce((sum, match) => sum + Number(match[1]), 0);
+  const waits = [...code.matchAll(/self\.wait\s*\(\s*(\d+(?:\.\d+)?)?\s*\)/g)].reduce((sum, match) => sum + Number(match[1] ?? 1), 0);
+  return explicit + waits + Math.max(0, plays - (code.match(/run_time\s*=/g) ?? []).length);
+}
+
+function fitShortVideo(code: string): string {
+  const duration = estimatedDuration(code);
+  return duration >= 7 && duration <= 10 ? code : modifySpeed(code, 8.5 / Math.max(duration, 0.1));
+}
+
 function setBackground(code: string, color: string) {
   const lines = code.split("\n");
   const existing = lines.findIndex((l) => /self\.camera\.background_color/.test(l));
@@ -153,17 +166,15 @@ class LessonScene(m.Scene):
         output_label = m.Text("результат", font_size=25, color=m.YELLOW).next_to(output_arrow, m.UP, buff=0.18)
         observation = m.Text("Построим модель и проследим изменение", font_size=25).to_edge(m.DOWN, buff=0.72)
         conclusion = m.Text("Вывод: связь видна на каждом шаге", font_size=25, color=m.TEAL).to_edge(m.DOWN, buff=0.72)
-        self.play(m.Write(title), run_time=1.1)
+        self.play(m.Write(title), run_time=0.9)
+        self.wait(0.3)
+        self.play(m.Write(question), run_time=0.8)
+        self.wait(0.3)
+        self.play(m.Create(model), m.Create(input_arrow), m.Write(input_label), m.Create(output_arrow), m.Write(output_label), run_time=1.3)
         self.wait(0.6)
-        self.play(m.Write(question), run_time=1.0)
-        self.wait(0.6)
-        self.play(m.Create(model), m.Create(input_arrow), m.Write(input_label), run_time=1.4)
-        self.play(m.Create(output_arrow), m.Write(output_label), run_time=1.25)
-        self.wait(0.8)
-        self.play(m.Write(observation), run_time=1.2)
-        self.wait(0.9)
-        self.play(m.Transform(observation, conclusion), run_time=1.3)
-        self.wait(1.9)
+        self.play(m.Write(observation), run_time=0.9)
+        self.play(m.Transform(observation, conclusion), run_time=1.0)
+        self.wait(1.1)
 `;
 }
 
@@ -182,21 +193,17 @@ class TaylorSine(m.Scene):
         fifth = axes.plot(lambda x: x - x**3 / 6 + x**5 / 120, x_range=[-3.0, 3.0], color=m.ORANGE)
         sine_label = m.Text("точный sin(x)", font_size=23, color=m.TEAL).next_to(axes.c2p(2.05, 0.7), m.UP, buff=0.16)
         formula = m.Text("x − x³/6 + x⁵/120", font_size=26, color=m.ORANGE).to_edge(m.DOWN, buff=0.68)
-        observation = m.Text("Больше членов — точнее кривая", font_size=24).to_edge(m.DOWN, buff=0.68)
-        self.play(m.Write(title), run_time=1.1)
-        self.wait(0.55)
-        self.play(m.Write(subtitle), m.Create(axes), run_time=1.35)
-        self.wait(0.55)
-        self.play(m.Create(sine), m.Write(sine_label), run_time=1.25)
-        self.wait(0.65)
-        self.play(m.Create(linear), run_time=1.2)
-        self.wait(0.75)
-        self.play(m.Transform(linear, cubic), run_time=1.35)
-        self.wait(0.75)
-        self.play(m.Transform(linear, fifth), m.Write(formula), run_time=1.45)
-        self.wait(0.8)
-        self.play(m.Transform(formula, observation), run_time=1.15)
-        self.wait(1.35)
+        self.play(m.Write(title), run_time=0.7)
+        self.wait(0.25)
+        self.play(m.Write(subtitle), m.Create(axes), run_time=0.9)
+        self.wait(0.3)
+        self.play(m.Create(sine), m.Write(sine_label), run_time=0.9)
+        self.wait(0.35)
+        self.play(m.Create(linear), run_time=0.7)
+        self.wait(0.35)
+        self.play(m.Transform(linear, cubic), run_time=0.8)
+        self.play(m.Transform(linear, fifth), m.Write(formula), run_time=1.0)
+        self.wait(1.0)
 `;
 }
 
@@ -218,19 +225,17 @@ class LessonScene(m.Scene):
         label_c = m.Text("результат", font_size=23, color=m.YELLOW).next_to(result, m.DOWN, buff=0.24)
         observation = m.Text("Проследим путь величины по шагам", font_size=24).to_edge(m.DOWN, buff=0.72)
         conclusion = m.Text("Вывод: модель связывает вход и результат", font_size=24, color=m.TEAL).to_edge(m.DOWN, buff=0.72)
-        self.play(m.Write(title), run_time=1.1)
-        self.wait(0.6)
-        self.play(m.Write(question), run_time=1.0)
+        self.play(m.Write(title), run_time=0.75)
+        self.wait(0.25)
+        self.play(m.Write(question), run_time=0.7)
+        self.wait(0.25)
+        self.play(m.Create(source), m.Write(label_a), m.Create(arrow_a), m.Create(model), m.Write(label_b), run_time=1.2)
+        self.wait(0.4)
+        self.play(m.Create(arrow_b), m.Create(result), m.Write(label_c), m.Write(observation), run_time=0.95)
+        self.wait(0.5)
+        self.play(m.Indicate(model), run_time=0.8)
+        self.play(m.Transform(observation, conclusion), run_time=0.9)
         self.wait(0.55)
-        self.play(m.Create(source), m.Write(label_a), run_time=1.15)
-        self.play(m.Create(arrow_a), m.Create(model), m.Write(label_b), run_time=1.35)
-        self.wait(0.65)
-        self.play(m.Create(arrow_b), m.Create(result), m.Write(label_c), run_time=1.3)
-        self.play(m.Write(observation), run_time=1.1)
-        self.wait(0.85)
-        self.play(m.Indicate(model), run_time=1.1)
-        self.play(m.Transform(observation, conclusion), run_time=1.2)
-        self.wait(1.55)
 `;
 }
 
@@ -240,7 +245,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   if (engine === "manimgx-browser" && /(тейлор|taylor).*(син|sin)|(син|sin).*(тейлор|taylor)/.test(p)) {
     return {
       text: "Построил sin(x) и его приближение полиномом Тейлора пятой степени. В коде используются только закреплённые импорты ManimGX и numpy.",
-      code: gxTaylorSineCode(),
+      code: fitShortVideo(gxTaylorSineCode()),
       title: isFirst ? "Ряд Тейлора" : undefined,
     };
   }
@@ -288,7 +293,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
     if (score > 0 && (!best || score > best.score)) best = { t, score };
   }
   if (best && engine === "arhimed-canvas") {
-    return { text: best.t.reply, code: best.t.code, title: isFirst ? best.t.title : undefined };
+    return { text: best.t.reply, code: fitShortVideo(best.t.code), title: isFirst ? best.t.title : undefined };
   }
 
   const topic = prompt.trim().replace(/^(покажи|нарисуй|создай|сделай|объясни|визуализируй)\s+/i, "");
@@ -296,7 +301,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   return {
     text:
       `Подготовил стартовую сцену-заготовку по теме «${nice}»: заголовок, акцентная линия и набор фигур, которые можно превратить в иллюстрацию. Уточните, что именно показать (например, формулу, график или шаги решения), — и я дострою анимацию. В офлайн-режиме я лучше всего знаю темы: кинематика, графы, линейная алгебра, ряды, геометрия, тригонометрия и производные. Подключите языковую модель в настройках, чтобы генерировать любые сцены.`,
-    code: engine === "manimgx-browser" ? gxStarterCode(nice) : canvasStarterCode(nice),
+    code: fitShortVideo(engine === "manimgx-browser" ? gxStarterCode(nice) : canvasStarterCode(nice)),
     title: isFirst ? nice.slice(0, 32) : undefined,
   };
 }

@@ -268,7 +268,34 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
   expect(result.badNumpy.status).toBe('rejected');
   expect(result.badCanvas.status).toBe('rejected');
   expect(result.cramped.status).toBe('rejected');
-  expect(result.canvasFallback).toBeGreaterThanOrEqual(12);
+  expect(result.canvasFallback).toBeGreaterThanOrEqual(7);
+  expect(result.canvasFallback).toBeLessThanOrEqual(10);
+});
+
+test('AI duration contract rejects implicit timing and videos outside 7–10 seconds', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { validateAiCandidate } = await import('/src/ai/validation.ts');
+    const base = `import manimx as m
+class Timed(m.Scene):
+    def construct(self):
+        dot = m.Dot()
+        self.play(m.Create(dot), run_time=2.0)
+        self.wait(1.0)
+        self.play(m.Indicate(dot), run_time=2.0)
+        self.wait(1.0)
+        self.play(m.FadeOut(dot), run_time=2.0)
+`;
+    return {
+      valid: validateAiCandidate(base, 'arhimed-canvas'),
+      implicit: validateAiCandidate(base.replace('run_time=2.0)', ')'), 'arhimed-canvas'),
+      long: validateAiCandidate(base.replaceAll('self.wait(1.0)', 'self.wait(3.0)'), 'arhimed-canvas'),
+    };
+  });
+  expect(result.valid.status).toBe('warning');
+  expect(result.implicit.status).toBe('rejected');
+  expect(result.long.status).toBe('rejected');
 });
 
 test('AI response parser recovers an escaped Python fence as a candidate revision', async ({ page }) => {

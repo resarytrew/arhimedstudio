@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ManimGXBrowserAdapterV1, type ManimGXBrowserSessionV1 } from "../engines/manimgx-browser-adapter";
 import type { Scene } from "../lib/store";
@@ -8,21 +8,52 @@ interface Props {
   projectId: string;
   scene: Scene;
   onDiagnostic?: (message: string) => void;
+  onMp4ExportCapabilityChange?: (available: boolean) => void;
+}
+
+export interface ManimGXPreviewHandle {
+  exportMp4: (filename: string, onProgress: (value: number) => void) => Promise<void>;
 }
 
 /** The Python runtime remains in a cross-origin sandbox and never receives Studio storage or credentials. */
-export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
+export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function ManimGXPreview({ projectId, scene, onDiagnostic, onMp4ExportCapabilityChange }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const diagnosticHandler = useRef(onDiagnostic);
+  const capabilityHandler = useRef(onMp4ExportCapabilityChange);
+  const sessionRef = useRef<ManimGXBrowserSessionV1 | undefined>(undefined);
+  const adapterRef = useRef<ManimGXBrowserAdapterV1 | undefined>(undefined);
   diagnosticHandler.current = onDiagnostic;
+  capabilityHandler.current = onMp4ExportCapabilityChange;
   const [message, setMessage] = useState<string | null>("Подключение изолированного ManimGX runtime…");
+
+  useImperativeHandle(ref, () => ({
+    async exportMp4(filename, onProgress) {
+      const session = sessionRef.current;
+      const adapter = adapterRef.current;
+      if (!session || !adapter) throw new Error("ManimGX ещё не готов к экспорту.");
+      const file = await adapter.exportMp4(session, {
+        projectId,
+        sceneId: scene.id,
+        revision: scene.currentRevision,
+        requestId: uid(),
+      }, { onProgress });
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 4_000);
+    },
+  }), [projectId, scene.id, scene.currentRevision]);
 
   useEffect(() => {
     let cancelled = false;
     let session: ManimGXBrowserSessionV1 | undefined;
     setMessage("Подключение изолированного ManimGX runtime…");
+    capabilityHandler.current?.(false);
     const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
     const adapter = new ManimGXBrowserAdapterV1(true);
+    adapterRef.current = adapter;
     void (async () => {
       const created = await adapter.createSession(context, (event) => {
         if (cancelled) return;
@@ -34,6 +65,7 @@ export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
       });
       if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
       session = created.value;
+      sessionRef.current = session;
       if (!host.current || cancelled) { await session.dispose(); return; }
       session.iframe.style.cssText = "width:100%;height:100%;border:0;background:#000";
       host.current.replaceChildren(session.iframe);
@@ -42,8 +74,15 @@ export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
         setMessage(loaded.message);
         diagnosticHandler.current?.(loaded.message);
       }
+      if (!cancelled) capabilityHandler.current?.(session.supportsMp4Export);
     })();
-    return () => { cancelled = true; void session?.dispose(); };
+    return () => {
+      cancelled = true;
+      capabilityHandler.current?.(false);
+      if (sessionRef.current === session) sessionRef.current = undefined;
+      if (adapterRef.current === adapter) adapterRef.current = undefined;
+      void session?.dispose();
+    };
   }, [projectId, scene]);
 
   return (
@@ -54,4 +93,4 @@ export function ManimGXPreview({ projectId, scene, onDiagnostic }: Props) {
       </div>}
     </div>
   );
-}
+});

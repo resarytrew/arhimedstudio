@@ -4,7 +4,7 @@ import { ChatPanel } from "../components/ChatPanel";
 import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
 import { Player, type PlayerHandle } from "../components/Player";
-import { ManimGXPreview } from "../components/ManimGXPreview";
+import { ManimGXPreview, type ManimGXPreviewHandle } from "../components/ManimGXPreview";
 import { SettingsModal } from "../components/SettingsModal";
 import { Sidebar, type PanelId } from "../components/Sidebar";
 import type { Timeline } from "../engine/interpreter";
@@ -70,9 +70,11 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [settings, setSettings] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [recording, setRecording] = useState<number | null>(null);
+  const [gxMp4ExportAvailable, setGxMp4ExportAvailable] = useState(false);
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
   const playerRef = useRef<PlayerHandle>(null);
+  const gxPreviewRef = useRef<ManimGXPreviewHandle>(null);
   const previewSurfaceRef = useRef<HTMLDivElement>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
 
@@ -304,6 +306,27 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     }
   };
 
+  const downloadVideo = async () => {
+    if (recording !== null) return;
+    if (scene.engineId === "arhimed-canvas") {
+      await doRecord();
+      return;
+    }
+    if (!gxPreviewRef.current || !gxMp4ExportAvailable) {
+      showToast("Этот ManimGX runtime пока не поддерживает экспорт MP4.");
+      return;
+    }
+    try {
+      setRecording(0);
+      await gxPreviewRef.current.exportMp4(`${active.title || "arhimed"}.mp4`, (value) => setRecording(value));
+      showToast("Видео сохранено в формате MP4");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Не удалось сформировать MP4-видео");
+    } finally {
+      setRecording(null);
+    }
+  };
+
   const copyCode = async () => {
     try {
       await navigator.clipboard.writeText(displayedCode);
@@ -413,7 +436,11 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           <IconBtn onClick={() => playerRef.current?.snapshot(`${active?.title ?? "frame"}.png`)} title="Сохранить кадр (PNG)" disabled={!visibleTimeline}>
             <Camera size={14} />
           </IconBtn>
-          <IconBtn onClick={doRecord} title="Скачать видео (WebM)" disabled={!visibleTimeline || recording !== null}>
+          <IconBtn
+            onClick={() => void downloadVideo()}
+            title={scene.engineId === "manimgx-browser" ? "Скачать видео (MP4)" : "Скачать видео (WebM)"}
+            disabled={scene.engineId === "manimgx-browser" ? !gxMp4ExportAvailable || recording !== null : !visibleTimeline || recording !== null}
+          >
             <Download size={14} />
           </IconBtn>
         </>
@@ -422,7 +449,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       bodyClassName="bg-black"
     >
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative h-full bg-black">
-        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
+        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
         {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
