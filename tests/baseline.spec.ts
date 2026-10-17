@@ -359,3 +359,23 @@ test('provider reply parser accepts Responses API and common gateway envelopes',
   });
   for (const result of results) expect(result.code).toContain('class Reply(m.Scene)');
 });
+
+test('hosted assistant normalizes an otherwise valid candidate that slightly exceeds the timing budget', async ({ page }) => {
+  await page.goto('/');
+  const content = '```python\nimport manimx as m\n\nclass Timed(m.Scene):\n    def construct(self):\n        dot = m.Dot()\n        self.play(m.Create(dot), run_time=2.5)\n        self.wait(1.4)\n        self.play(m.Indicate(dot), run_time=2.5)\n        self.wait(1.4)\n        self.play(m.FadeOut(dot), run_time=2.5)\n```';
+  await page.route('https://example.test/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content } }] }) }));
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error browser source module
+    const { llmAssistant } = await import('/src/lib/assistant.ts');
+    // @ts-expect-error browser source module
+    const { validateAiCandidate } = await import('/src/ai/validation.ts');
+    const reply = await llmAssistant(
+      { provider: 'openai-compatible', baseUrl: 'https://example.test/v1', apiKey: 'test', model: 'test-model', rememberKey: false },
+      [], 'Сделай сцену', '', undefined, 'system', 100,
+    );
+    return { code: reply.code, validation: validateAiCandidate(reply.code ?? '', 'arhimed-canvas') };
+  });
+  expect(result.validation.status).not.toBe('rejected');
+  expect(result.code).toContain('run_time=2.06');
+  expect(result.code).toContain('self.wait(1.16)');
+});

@@ -386,5 +386,8 @@ export async function llmAssistant(
   const data = decodeProviderResponse(await res.text());
   const content = providerContent(data);
   if (!content) throw new Error(`Провайдер вернул ответ без текста (${providerResponseSummary(data)}). Проверьте модель или пришлите эту диагностику разработчику.`);
-  return parseAssistantContent(content);
+  const reply = parseAssistantContent(content);
+  // Hosted models occasionally miss the timing budget by a few tenths of a second.
+  // Explicit durations can be safely scaled before the candidate reaches validation.
+  return reply.code ? { ...reply, code: fitShortVideo(reply.code) } : reply;
 }
