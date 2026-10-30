@@ -20,6 +20,19 @@ jobs:
         with:
           name: arhimed-static
           path: dist
+  test-manimgx-session:
+    name: ManimGX runtime session regression (mocked cross-origin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chrome
+      - run: npx playwright test tests/manimgx-session.spec.ts --project=chrome
+
   deploy-pages:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: build
