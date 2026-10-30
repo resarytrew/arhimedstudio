@@ -81,7 +81,7 @@ class MemsAccelerometer3D(m.ThreeDScene):
         ]
 
         title = m.Text("MEMS: capacitive accelerometer", font_size=34).to_corner(m.UL)
-        formula = m.MathTex(r"C=\\frac{\\varepsilon A}{d}", font_size=46).to_corner(m.UR)
+        formula = m.MathTex(r"C=\frac{\varepsilon A}{d}", font_size=46).to_corner(m.UR)
         note = m.Text("Displacement changes the electrode gaps", font_size=24)
         note.to_edge(m.DOWN, buff=0.30)
         self.add_fixed_in_frame_mobjects(title, formula, note)
