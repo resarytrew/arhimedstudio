@@ -6,7 +6,7 @@ const RUNTIME_URL = "https://arhimed-runtime.github.io/cross-origin-runtime.html
  * The fake runtime exercises only the authenticated adapter lifecycle.
  * It never claims that hardware WebGPU or 3D scene rendering succeeded.
  */
-const mockRuntime = String.raw\`<!doctype html>
+const mockRuntime = String.raw`<!doctype html>
 <html><body><script>
   window.receivedRuns = [];
   let connected = false;
@@ -37,7 +37,7 @@ const mockRuntime = String.raw\`<!doctype html>
       requestId: "connect", kind: "ready", detail: "Authenticated mock runtime",
     });
   });
-</script></body></html>\`;
+</script></body></html>`;
 
 test("ManimGX keeps one authenticated runtime across Python source edits", async ({ page }) => {
   let boots = 0;
