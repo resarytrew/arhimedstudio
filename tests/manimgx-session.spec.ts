@@ -19,16 +19,19 @@ const mockRuntime = String.raw`<!doctype html>
     port.onmessage = ({ data: command }) => {
       if (command.protocol !== "arhimed-runtime-v1" || command.sessionId !== sessionId) return;
       if (command.kind === "run") {
-        window.receivedRuns.push({ source: command.source, revision: command.revision });
+        const previous = window.receivedRuns.at(-1);
+        window.receivedRuns.push({
+          source: command.source, revision: command.revision, requestId: command.requestId,
+        });
         port.postMessage({
           protocol: "arhimed-runtime-v1", sessionId, revision: command.revision,
           requestId: command.requestId, kind: "rendered", detail: "Mock render finished",
         });
-        // A response for a superseded revision must not disrupt the new scene.
-        setTimeout(() => port.postMessage({
-          protocol: "arhimed-runtime-v1", sessionId, revision: command.revision,
-          requestId: command.requestId, kind: "failed", detail: "stale-revision-error",
-        }), 250);
+        // Only the superseded request gets a late error. Current errors must remain visible.
+        if (previous) port.postMessage({
+          protocol: "arhimed-runtime-v1", sessionId, revision: previous.revision,
+          requestId: previous.requestId, kind: "failed", detail: "stale-revision-error",
+        });
       }
     };
     port.start();
