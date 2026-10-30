@@ -99,20 +99,25 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
     const context = { projectId, sceneId, revision: sceneRevision, requestId: uid() };
     setMessage("Выполнение сцены ManimGX…");
     capabilityHandler.current?.(false);
-    void adapter.loadScene(session, context, {
-      source: sceneSource,
-      language: "python",
-      dialect: "manimgx-0.1.1",
-      entrypoint: "Scene.construct",
-    }).then((loaded) => {
+    // Python execution and GPU scene construction are expensive. Coalesce keystrokes
+    // so we submit only the most recent stable source to the long-lived runtime.
+    const timer = window.setTimeout(() => {
       if (cancelled || sessionRef.current !== session) return;
-      if (!loaded.ok && !(loaded.reason === "unavailable" && loaded.message.includes("заменён более новой"))) {
-        setMessage(loaded.message);
-        diagnosticHandler.current?.(loaded.message);
-      }
-      capabilityHandler.current?.(session.supportsMp4Export && loaded.ok);
-    });
-    return () => { cancelled = true; };
+      void adapter.loadScene(session, context, {
+        source: sceneSource,
+        language: "python",
+        dialect: "manimgx-0.1.1",
+        entrypoint: "Scene.construct",
+      }).then((loaded) => {
+        if (cancelled || sessionRef.current !== session) return;
+        if (!loaded.ok && !(loaded.reason === "unavailable" && loaded.message.includes("заменён более новой"))) {
+          setMessage(loaded.message);
+          diagnosticHandler.current?.(loaded.message);
+        }
+        capabilityHandler.current?.(session.supportsMp4Export && loaded.ok);
+      });
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   }, [projectId, sceneId, sceneRevision, sceneSource, sessionVersion]);
 
   return (
