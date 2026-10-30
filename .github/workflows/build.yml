@@ -30,6 +30,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: python3 -m py_compile examples/manimgx/*.py
       - run: npx playwright install --with-deps chrome
       - run: npx playwright test tests/manimgx-session.spec.ts --project=chrome
 
