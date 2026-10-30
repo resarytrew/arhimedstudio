@@ -38,7 +38,7 @@ class MemsAccelerometer3D(m.ThreeDScene):
         substrate = m.Cube(side_length=1)
         substrate.stretch_to_fit_width(7.2)
         substrate.stretch_to_fit_height(4.0)
-        substrate.stretch_to_fit_depth(0.17)
+        substrate.rescale_to_fit(0.17, 2, stretch=True)
         substrate.set_color("#1e293b")
         substrate.set_fill(opacity=0.85)
         substrate.move_to([0, 0, -0.55])
@@ -46,14 +46,14 @@ class MemsAccelerometer3D(m.ThreeDScene):
         frame = m.Cube(side_length=1, fill_color="#64748b", fill_opacity=0.95)
         frame.stretch_to_fit_width(6.6)
         frame.stretch_to_fit_height(0.32)
-        frame.stretch_to_fit_depth(0.28)
+        frame.rescale_to_fit(0.28, 2, stretch=True)
         frame.move_to([0, -1.58, -0.05])
 
         def electrode(x: float, color: str) -> m.Cube:
             plate = m.Cube(side_length=1, fill_color=color, fill_opacity=0.93)
             plate.stretch_to_fit_width(0.20)
             plate.stretch_to_fit_height(1.70)
-            plate.stretch_to_fit_depth(0.48)
+            plate.rescale_to_fit(0.48, 2, stretch=True)
             plate.move_to([x, 0, 0.25])
             return plate
 
@@ -64,7 +64,7 @@ class MemsAccelerometer3D(m.ThreeDScene):
         mass = m.Cube(side_length=1, fill_color="#38bdf8", fill_opacity=0.98)
         mass.stretch_to_fit_width(1.50)
         mass.stretch_to_fit_height(1.70)
-        mass.stretch_to_fit_depth(0.65)
+        mass.rescale_to_fit(0.65, 2, stretch=True)
         mass.add_updater(lambda mob: mob.move_to([displacement.get_value(), 0, 0.25]))
 
         def spring(left: bool, y: float) -> m.VMobject:
