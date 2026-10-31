@@ -68,7 +68,11 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
           setMessage(event.message);
           diagnosticHandler.current?.(event.message);
         }
-        if (event.type === "result" && event.result === "rendered") setMessage(null);
+        if (event.type === "result" && event.result === "rendered") {
+          setMessage(null);
+          capabilityHandler.current?.(sessionRef.current?.supportsMp4Export === true
+            && sessionRef.current.renderedRevision === sessionRef.current.revision);
+        }
       });
       if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
       session = created.value;
@@ -114,7 +118,7 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
           setMessage(loaded.message);
           diagnosticHandler.current?.(loaded.message);
         }
-        capabilityHandler.current?.(session.supportsMp4Export && loaded.ok);
+        capabilityHandler.current?.(session.supportsMp4Export && loaded.ok && session.renderedRevision === session.revision);
       });
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
