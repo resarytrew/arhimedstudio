@@ -86,9 +86,12 @@ GitHub Actions on this Studio branch clones the public runtime into a
 temporary workspace, applies the three source files, installs pinned
 Mediabunny and compiles the runtime with TypeScript and Vite. Another
 Playwright test covers the authenticated download protocol using a fake
-runtime and a non-playable `ftyp` buffer.
+runtime and a non-playable `ftyp` buffer. A separate **real WebCodecs**
+Chrome test creates a 640x360 H.264 MP4 from a controlled canvas and
+checks that Chrome can decode its video metadata. This encoding test
+passed in GitHub Actions run 41212878006 (31 October 2026).
 
-**Neither compilation nor a mock transport test proves actual GPU output.**
+**Successful WebCodecs encoding does not prove actual ManimGX WebGPU canvas capture.**
 Accept the feature only after a real Chrome/Edge WebGPU test produces a
 playable MP4 with correct timing, no blank frames, and correct output
 pixels, checked with FFprobe or equivalent.
@@ -104,3 +107,12 @@ runtime until the patch is applied and published with appropriate access.
 
 Mediabunny is licensed MPL-2.0. Preserve its applicable license and notice
 requirements when distributing the built runtime.
+
+For a Windows PowerShell checkout of the runtime and Studio in sibling directories:
+
+```powershell
+Copy-Item ..\arhimedstudio\integration\manimgx-runtime-mp4\src\*.ts .\src\
+npm ci
+npm install --save-exact mediabunny@1.64.0
+npm run build
+```
