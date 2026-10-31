@@ -42,3 +42,31 @@ test("syntax highlighting escapes markup and rejects injected color values", asy
   expect(html).not.toMatch(/style="[^"]*(?:onmouseover|onerror)/);
 });
 
+test("typing bursts keep a stable current revision id and a bounded history", async ({ page }) => {
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error Vite serves the browser-only store module.
+    const { newProject, updateSceneSource, activeScene } = await import("/src/lib/store.ts");
+    const project = newProject("Revision test", "initial");
+    const first = updateSceneSource(project, "first edit");
+    const firstId = activeScene(first).currentRevision;
+    const second = updateSceneSource(first, "second edit");
+    return {
+      currentIdStable: activeScene(second).currentRevision === firstId,
+      revisions: activeScene(second).revisions.length,
+      currentSource: activeScene(second).source,
+    };
+  });
+  expect(result).toEqual({ currentIdStable: true, revisions: 2, currentSource: "second edit" });
+});
+
+test("pending project edits flush to storage on a fast page reload", async ({ page }) => {
+  await page.goto("/#/studio");
+  const editor = page.locator("textarea.code-area");
+  await expect(editor).toBeVisible();
+  const source = "import manimx as m\n\nclass FastSave(m.Scene):\n    def construct(self):\n        self.wait(1)\n";
+  await editor.fill(source);
+  await page.reload();
+  await expect(page.locator("textarea.code-area")).toHaveValue(source);
+});
+

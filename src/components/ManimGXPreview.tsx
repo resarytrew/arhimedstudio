@@ -51,21 +51,22 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
   }, [projectId, scene.id]);
 
   useEffect(() => {
-    const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
-    requestRef.current = context.requestId;
-    const job = new RenderJobController(context, "preview", snapshot => {
-      if (requestRef.current !== snapshot.requestId) return;
-      setJobState(snapshot);
-      callbacks.current.onJobChange?.(snapshot);
-    });
-    jobRef.current = job;
     callbacks.current.onDiagnostic?.("");
     callbacks.current.onMp4ExportCapabilityChange?.(false);
     if (!scene.source.trim()) {
-      job.cancel("Добавьте код сцены, чтобы запустить превью.");
-      return () => job.cancel("Сцена очищена.");
+      jobRef.current?.cancel("Добавьте код сцены, чтобы запустить превью.");
+      return;
     }
+    let job: RenderJobController | undefined;
     const timer = window.setTimeout(() => {
+      const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
+      requestRef.current = context.requestId;
+      job = new RenderJobController(context, "preview", snapshot => {
+        if (requestRef.current !== snapshot.requestId) return;
+        setJobState(snapshot);
+        callbacks.current.onJobChange?.(snapshot);
+      });
+      jobRef.current = job;
       void (async () => {
         job.start(5 * 60_000, terminate);
         try {
@@ -105,7 +106,10 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
         }
       })();
     }, 350);
-    return () => { window.clearTimeout(timer); job.cancel("Запуск заменён новой ревизией сцены."); };
+    return () => {
+      window.clearTimeout(timer);
+      job?.cancel("Запуск заменён новой ревизией сцены.");
+    };
   }, [projectId, scene.id, scene.currentRevision, scene.source, retry]);
 
   return <div className="relative h-full bg-black">

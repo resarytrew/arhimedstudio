@@ -91,15 +91,27 @@ export function CodeEditor({ value, onChange, errorLine, readOnly = false, baseV
     return { lines, added: lines.filter((line) => line.kind === "add").length, removed: lines.filter((line) => line.kind === "del").length };
   }, [readOnly, baseValue, value]);
   const lines = value.split("\n").length;
+  const gutterLines = useMemo(() => {
+    if (!diffCounts) return Array.from({ length: lines }, (_, index) => ({ label: String(index + 1), kind: "same" as const }));
+    let currentLine = 0;
+    return diffCounts.lines.map((line) => ({
+      label: line.kind === "del" ? "−" : String(++currentLine),
+      kind: line.kind,
+    }));
+  }, [diffCounts, lines]);
 
-  const onScroll = () => {
-    const ta = taRef.current;
-    if (!ta) return;
-    if (preRef.current) {
-      preRef.current.scrollTop = ta.scrollTop;
-      preRef.current.scrollLeft = ta.scrollLeft;
+  const onScroll = (source?: HTMLTextAreaElement | HTMLPreElement | null) => {
+    const top = source?.scrollTop ?? taRef.current?.scrollTop ?? 0;
+    const left = source?.scrollLeft ?? taRef.current?.scrollLeft ?? 0;
+    if (preRef.current && preRef.current !== source) {
+      preRef.current.scrollTop = top;
+      preRef.current.scrollLeft = left;
     }
-    if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop;
+    if (taRef.current && taRef.current !== source) {
+      taRef.current.scrollTop = top;
+      taRef.current.scrollLeft = left;
+    }
+    if (gutterRef.current) gutterRef.current.scrollTop = top;
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -132,15 +144,17 @@ export function CodeEditor({ value, onChange, errorLine, readOnly = false, baseV
         ref={gutterRef}
         className="w-11 shrink-0 select-none overflow-hidden border-r border-slate-100 py-2 text-right font-mono text-[11.5px] leading-[20px] text-slate-400 dark:border-white/5 dark:text-slate-600"
       >
-        {Array.from({ length: lines }, (_, i) => (
+        {gutterLines.map((line, i) => (
           <div
             key={i}
             className={cn(
               "pr-2.5",
+              line.kind === "add" && "text-emerald-600 dark:text-emerald-400",
+              line.kind === "del" && "text-red-600 dark:text-red-400",
               errorLine === i + 1 && "bg-red-100 font-semibold text-red-600 dark:bg-red-500/15 dark:text-red-400"
             )}
           >
-            {i + 1}
+            {line.label}
           </div>
         ))}
         <div className="h-24" />
@@ -149,15 +163,20 @@ export function CodeEditor({ value, onChange, errorLine, readOnly = false, baseV
         {diffCounts && <div aria-label="Изменения кандидата ИИ" className="absolute right-3 top-2 z-10 rounded bg-slate-900/10 px-2 py-0.5 font-mono text-[10px] dark:bg-white/10"><span className="text-emerald-600">+{diffCounts.added}</span><span className="ml-2 text-red-600">-{diffCounts.removed}</span></div>}
         <pre
           ref={preRef}
-          aria-hidden
-          className={cn(shared, "pointer-events-none absolute inset-0 overflow-hidden px-3 py-2 text-slate-800 dark:text-slate-200")}
-          dangerouslySetInnerHTML={diffCounts ? { __html: diffCounts.lines.map((line) => `<span class="block ${line.kind === "add" ? "bg-emerald-100/80 dark:bg-emerald-900/30" : line.kind === "del" ? "bg-red-100/80 text-red-700 line-through dark:bg-red-900/30 dark:text-red-300" : ""}">${line.kind === "add" ? "+ " : line.kind === "del" ? "− " : "  "}${highlight(line.text).trimEnd()}</span>`).join("") + "\n" } : { __html: html }}
+          aria-hidden={!diffCounts}
+          onScroll={diffCounts ? () => onScroll(preRef.current) : undefined}
+          className={cn(
+            shared,
+            "absolute inset-0 px-3 py-2 text-slate-800 dark:text-slate-200",
+            diffCounts ? "overflow-auto" : "pointer-events-none overflow-hidden"
+          )}
+          dangerouslySetInnerHTML={diffCounts ? { __html: diffCounts.lines.map((line) => `<span class="block ${line.kind === "add" ? "bg-emerald-100/80 dark:bg-emerald-900/30" : line.kind === "del" ? "bg-red-100/80 text-red-700 line-through dark:bg-red-900/30 dark:text-red-300" : ""}">${highlight(line.text).trimEnd()}</span>`).join("") } : { __html: html }}
         />
-        <textarea
+        {!diffCounts && <textarea
           ref={taRef}
           value={value}
           onChange={(e) => { if (!readOnly) onChange(e.target.value); }}
-          onScroll={onScroll}
+          onScroll={(event) => onScroll(event.currentTarget)}
           onKeyDown={onKeyDown}
           readOnly={readOnly}
           spellCheck={false}
@@ -168,7 +187,7 @@ export function CodeEditor({ value, onChange, errorLine, readOnly = false, baseV
             "code-area scroll-thin absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent px-3 py-2 text-transparent outline-none selection:bg-blue-200/60 dark:selection:bg-blue-500/30",
             readOnly && "cursor-default"
           )}
-        />
+        />}
       </div>
     </div>
   );

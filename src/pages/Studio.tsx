@@ -128,7 +128,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   useEffect(() => () => {
     videoJobRef.current?.cancel("Экспорт отменён: сцена закрыта или её исходник изменился.");
-  }, [active.id, scene.id, scene.currentRevision]);
+  }, [active.id, scene.id, scene.currentRevision, scene.source]);
 
   // Canvas stays the default engine, now through EngineAdapterV1 rather than a universal scene format.
   useEffect(() => {
@@ -626,7 +626,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       }
     >
           {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
-          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
+          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
     </Panel>
   );
 

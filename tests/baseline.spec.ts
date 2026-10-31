@@ -177,8 +177,14 @@ test('offline assistant creates a reviewed candidate revision before applying it
   await expect(editor).toHaveValue(before);
   await page.getByRole('button',{name:'Открыть',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Кандидат ИИ'})).toBeVisible();
-  await expect(editor).toHaveValue(/class Pythagoras/);
-  await expect(editor).toHaveAttribute('readonly','');
+  await expect(page.getByLabel('Изменения кандидата ИИ')).toBeVisible();
+  await expect(page.locator('.code-theme pre')).toContainText(/class Pythagoras/);
+  await expect(editor).toHaveCount(0);
+  const diffLayout = await page.locator('.code-theme').evaluate((root) => ({
+    diffRows: root.querySelector('pre')?.children.length,
+    gutterRows: (root.firstElementChild?.children.length ?? 1) - 1,
+  }));
+  expect(diffLayout.diffRows).toBe(diffLayout.gutterRows);
   await page.getByRole('button',{name:'Принять кандидатную ревизию'}).click();
   await expect(editor).toHaveValue(/class Pythagoras/);
   await expect(page.getByText(/Ошибка в строке/)).toBeHidden();

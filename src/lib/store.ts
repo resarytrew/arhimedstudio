@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EngineId } from "../engines/contracts";
 import type { AiCandidateValidationV1 } from "../ai/validation";
 import { WELCOME_CODE } from "./templates";
@@ -86,6 +86,10 @@ export function activeScene(project: Project): Scene {
   return project.scenes.find((scene) => scene.id === project.activeSceneId) ?? project.scenes[0];
 }
 
+function nextRevisionNumber(scene: Scene): number {
+  return scene.revisions.reduce((max, revision) => Math.max(max, revision.number), 0) + 1;
+}
+
 export function setActiveScene(project: Project, sceneId: string): Project {
   const scene = project.scenes.find((candidate) => candidate.id === sceneId);
   if (!scene || scene.id === project.activeSceneId) return project;
@@ -118,7 +122,7 @@ export function updateSceneSource(project: Project, source: string): Project {
   const last = scene.revisions.at(-1);
   const coalesce = last?.kind === "manual" && now - last.createdAt < 2500;
   const revision: SceneRevision = {
-    id: uid(), number: coalesce ? last.number : scene.revisions.length + 1, kind: "manual", source,
+    id: coalesce ? last.id : uid(), number: coalesce ? last.number : nextRevisionNumber(scene), kind: "manual", source,
     baseRevision: coalesce ? last.baseRevision : scene.currentRevision, createdAt: now,
   };
   const revisions = coalesce ? [...scene.revisions.slice(0, -1), revision] : [...scene.revisions, revision];
@@ -144,7 +148,7 @@ export function setActiveSceneEngine(project: Project, engineId: Extract<EngineI
 export function addAiCandidate(project: Project, source: string, baseRevision: string): { project: Project; candidate: SceneRevision } {
   const scene = activeScene(project);
   const candidate: SceneRevision = {
-    id: uid(), number: scene.revisions.length + 1, kind: "ai-candidate", source, baseRevision, createdAt: Date.now(),
+    id: uid(), number: nextRevisionNumber(scene), kind: "ai-candidate", source, baseRevision, createdAt: Date.now(),
   };
   const nextScene = { ...scene, revisions: [...scene.revisions, candidate] };
   return { project: { ...project, scenes: project.scenes.map((value) => (value.id === scene.id ? nextScene : value)), updatedAt: Date.now() }, candidate };
@@ -155,7 +159,7 @@ export function acceptAiCandidate(project: Project, candidateId: string): { proj
   const candidate = scene.revisions.find((revision) => revision.id === candidateId && revision.kind === "ai-candidate");
   if (!candidate || candidate.baseRevision !== scene.currentRevision) return null;
   const accepted: SceneRevision = {
-    id: uid(), number: scene.revisions.length + 1, kind: "accepted-ai", source: candidate.source, baseRevision: candidate.baseRevision, createdAt: Date.now(),
+    id: uid(), number: nextRevisionNumber(scene), kind: "accepted-ai", source: candidate.source, baseRevision: candidate.baseRevision, createdAt: Date.now(),
   };
   const nextScene = { ...scene, source: candidate.source, currentRevision: accepted.id, revisions: [...scene.revisions, accepted] };
   return {
@@ -175,12 +179,27 @@ function load<T>(key: string, fallback: T): T {
 
 export function usePersistent<T>(key: string, initial: () => T) {
   const [value, setValue] = useState<T>(() => load(key, initial()));
+  const valueRef = useRef(value);
+  const keyRef = useRef(key);
+  const pendingRef = useRef(false);
+  valueRef.current = value;
+  keyRef.current = key;
+  const saveLatest = () => {
+    try { localStorage.setItem(keyRef.current, JSON.stringify(valueRef.current)); } catch { /* storage can be unavailable or full */ }
+  };
   useEffect(() => {
-    const save = () => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage can be unavailable or full */ } };
-    const timer = window.setTimeout(save, 400);
-    window.addEventListener("pagehide", save);
-    return () => { window.clearTimeout(timer); window.removeEventListener("pagehide", save); };
+    pendingRef.current = true;
+    const timer = window.setTimeout(() => { saveLatest(); pendingRef.current = false; }, 400);
+    return () => window.clearTimeout(timer);
   }, [key, value]);
+  useEffect(() => {
+    const flush = () => { if (pendingRef.current) { saveLatest(); pendingRef.current = false; } };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+  useEffect(() => () => {
+    if (pendingRef.current) { saveLatest(); pendingRef.current = false; }
+  }, []);
   return [value, setValue] as const;
 }
 
