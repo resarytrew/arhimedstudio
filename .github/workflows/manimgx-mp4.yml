@@ -1,0 +1,43 @@
+name: Validate ManimGX MP4 runtime overlay
+on:
+  push:
+    branches: [feat/manimgx-mp4-export]
+  pull_request:
+    paths:
+      - 'integration/manimgx-runtime-mp4/**'
+      - 'src/components/ManimGXPreview.tsx'
+      - 'src/engines/manimgx-browser-adapter.ts'
+      - '.github/workflows/manimgx-mp4.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Retrieve public isolated runtime
+        run: git clone --depth 1 https://github.com/arhimed-runtime/arhimed-runtime.github.io.git /tmp/arhimed-mp4-runtime
+      - name: Apply MP4 runtime sources
+        run: cp integration/manimgx-runtime-mp4/src/*.ts /tmp/arhimed-mp4-runtime/src/
+      - name: Install locked runtime dependencies and MP4 muxer
+        working-directory: /tmp/arhimed-mp4-runtime
+        run: |
+          npm ci
+          npm install --save-exact mediabunny@1.64.0
+      - name: Compile isolated runtime (TypeScript + Vite)
+        working-directory: /tmp/arhimed-mp4-runtime
+        run: npm run build
+  studio-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
