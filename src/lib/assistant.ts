@@ -1,4 +1,5 @@
 import { genericCode, TEMPLATES } from "./templates";
+import { SCIENCE_TEMPLATES } from "./scientific-libraries";
 import type { AiEngineId } from "../ai/profiles";
 
 export interface AssistantReply {
@@ -342,6 +343,12 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   }
 
   // --- new scene from template ---
+  if (engine === "manimgx-browser") {
+    const matches = SCIENCE_TEMPLATES.map(t => ({ t, score: t.prompt.toLowerCase() === p ? 100 : t.keywords.filter(keyword => p.includes(keyword)).length }))
+      .filter(item => item.score > 0).sort((a, b) => b.score - a.score);
+    const match = matches[0]?.t;
+    if (match) return { text: match.reply, code: fitShortVideo(match.code), title: isFirst ? match.title : undefined };
+  }
   let best: { t: (typeof TEMPLATES)[number]; score: number } | null = null;
   for (const t of TEMPLATES) {
     let score = 0;

@@ -48,3 +48,22 @@ Acceptance evidence:
 Stage 3 may begin only as a separate publication increment. It must not make the local Python extensions mandatory or change the accepted Canvas/GX contracts.
 
 The architecture specification describes the target, not completed features. Record evidence and unresolved conditions here before advancing.
+
+## Scientific Python extension — 2026-10-31
+
+The separate-origin GX runtime now vendors SymPy 1.14.0, SciPy 1.18.0,
+Schemdraw 0.23, Biopython 1.87, PeriodicTable 2.1.0 and Matplotlib 3.10.8.
+This extends the existing GX integration; it does not introduce a local Python
+service or claim completion of the broader Stage 3 publication work.
+
+Acceptance evidence: both production builds pass; six numerical/diagram lessons
+execute in real Chrome and Edge Python/WebGPU through the authenticated channel
+without external package requests. Captured screenshots confirm readable diagram
+labels and plots. Eight Studio checks pass across Chrome and Edge, covering
+scientific candidate validation, offline example selection, menu availability,
+unsupported-import rejection, persistent sessions and MP4 download protocol.
+The runtime's real H.264 export regression also passes. The runtime verifies all
+package hashes and stays within Pages size limits (approximately 72 MB).
+See [the library catalog](scientific-libraries.md) for supported operations,
+in-memory drawing adapters and the distinction between calculation, diagram
+layout and simulation.

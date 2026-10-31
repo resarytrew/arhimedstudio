@@ -1,3 +1,5 @@
+import { SCIENTIFIC_AI_INSTRUCTIONS } from "../lib/scientific-libraries";
+
 export type AiEngineId = "arhimed-canvas" | "manimgx-browser";
 
 export interface AiEngineProfileV1 {
@@ -49,7 +51,8 @@ export const AI_ENGINE_PROFILES: Record<AiEngineId, AiEngineProfileV1> = {
 РЕЖИМ: полный документированный API ManimGX 0.1.1 в закреплённом браузерном runtime. Это не Canvas-подмножество и не Manim Community с выдуманными заменами.
 Обычный вариант импорта для генерируемого кода: import manimgx as m; при вычислениях можно добавить import numpy as np или import math. Runtime также принимает документированные варианты import manimgx, from manimgx import ..., from manimgx import * и безопасные закреплённые математические модули Python. Выбирай один ясный стиль и согласованно используй его в классе сцены.
 Используй реальные имена ManimGX 0.1.1: Text, Tex, MathTex; Mobject, VMobject, Group, VGroup; геометрию, координатные системы Axes/NumberPlane/ComplexPlane и plot; Transform/ReplacementTransform/TransformMatchingTex, AnimationGroup/Succession/LaggedStart; ValueTracker, always_redraw, add_updater. Допустим обычный Python: функции, циклы, comprehensions, *args/**kwargs, распаковка, lambda, dataclasses и математические вычисления. 3D-сцены, камера и поверхности пока не генерируй: для них нужен отдельный опубликованный browser-прогон, а не предположение по API.
-Не используй micropip, importlib, __import__, js/pyodide bridge, браузерные API, файловую систему, сеть, URL или установку пакетов. Не обращайся к np.math: используй math или сам numpy. В браузере не создавай видеофайлы, не загружай локальные ресурсы и не вызывай внешние audio/voice-провайдеры.`,
+Не используй micropip, importlib, __import__, js/pyodide bridge, браузерные API, файловую систему, сеть, URL или установку пакетов. Не обращайся к np.math: используй math или сам numpy. В браузере не создавай видеофайлы, не загружай локальные ресурсы и не вызывай внешние audio/voice-провайдеры.
+${SCIENTIFIC_AI_INSTRUCTIONS}`,
     allowedApi: ["Text", "Tex", "MathTex", "Axes", "NumberPlane", "ComplexPlane", "VGroup", "TransformMatchingTex", "ValueTracker", "always_redraw", "add_updater", "self.play"],
     repairRule: "Верни полную замену для ManimGX 0.1.1, сохранив документированный API и закреплённые безопасные импорты; не добавляй пакеты, сеть или доступ к файлам.",
   },

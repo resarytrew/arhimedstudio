@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUp, Check, ChevronLeft, ChevronRight, CircleCheck, Code2, MessagesSquare, Plus, Sparkles, Square } from "lucide-react";
 import type { Message } from "../lib/store";
 import { TEMPLATES } from "../lib/templates";
+import { SCIENCE_TEMPLATES } from "../lib/scientific-libraries";
+import type { EngineId } from "../engines/contracts";
 import { cn } from "../utils/cn";
 import { Panel } from "./Panel";
 
 interface Props {
+  engineId: EngineId;
   messages: Message[];
   thinking: boolean;
   onSend: (text: string) => void;
@@ -46,6 +49,10 @@ function Typewriter({ text, onDone }: { text: string; onDone: () => void }) {
 }
 
 export function ChatPanel(p: Props) {
+  const templates = p.engineId === "manimgx-browser" ? SCIENCE_TEMPLATES : TEMPLATES;
+  const promptPages = p.engineId === "manimgx-browser"
+    ? [SCIENCE_TEMPLATES.slice(0, 3).map(t => t.prompt), SCIENCE_TEMPLATES.slice(3).map(t => t.prompt)]
+    : PROMPT_PAGES;
   const [input, setInput] = useState("");
   const [page, setPage] = useState(0);
   const [menu, setMenu] = useState(false);
@@ -90,14 +97,14 @@ export function ChatPanel(p: Props) {
                 <span className="text-[12px] font-medium text-slate-500 dark:text-slate-400">Идеи для начала</span>
                 <div className="flex gap-1 text-slate-500">
                   <button
-                    onClick={() => setPage((x) => (x + PROMPT_PAGES.length - 1) % PROMPT_PAGES.length)}
+                    onClick={() => setPage((x) => (x + promptPages.length - 1) % promptPages.length)}
                     className="rounded-md p-1 hover:bg-slate-200/60 dark:hover:bg-slate-800"
                     aria-label="Назад"
                   >
                     <ChevronLeft size={15} />
                   </button>
                   <button
-                    onClick={() => setPage((x) => (x + 1) % PROMPT_PAGES.length)}
+                    onClick={() => setPage((x) => (x + 1) % promptPages.length)}
                     className="rounded-md p-1 hover:bg-slate-200/60 dark:hover:bg-slate-800"
                     aria-label="Вперёд"
                   >
@@ -106,7 +113,7 @@ export function ChatPanel(p: Props) {
                 </div>
               </div>
               <ul key={page}>
-                {PROMPT_PAGES[page].map((s, i) => (
+                {promptPages[page % promptPages.length].map((s, i) => (
                   <li key={s} className="fade-up border-b border-slate-200/70 last:border-0 dark:border-white/5" style={{ animationDelay: `${i * 40}ms` }}>
                     <button
                       onClick={() => send(s)}
@@ -244,9 +251,9 @@ export function ChatPanel(p: Props) {
                 <Plus size={17} />
               </button>
               {menu && (
-                <div className="fade-up absolute bottom-10 right-0 z-20 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-white/10 dark:bg-slate-800">
+                <div className="fade-up absolute bottom-10 right-0 z-20 max-h-80 w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-white/10 dark:bg-slate-800">
                   <div className="px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">Готовые темы</div>
-                  {TEMPLATES.map((t) => (
+                  {templates.map((t) => (
                     <button
                       key={t.id}
                       onClick={() => send(t.prompt)}

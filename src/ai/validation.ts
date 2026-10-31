@@ -1,4 +1,5 @@
 import type { AiEngineId } from "./profiles";
+import { SCIENTIFIC_IMPORT_ROOTS } from "../lib/scientific-libraries";
 
 export interface AiCandidateDiagnosticV1 {
   line?: number;
@@ -19,6 +20,7 @@ const lineOf = (source: string, pattern: RegExp) => {
 const GX_IMPORT_ROOTS = new Set([
   "manimgx", "numpy", "math", "cmath", "statistics", "random", "fractions", "decimal",
   "dataclasses", "functools", "itertools", "collections", "operator",
+  ...SCIENTIFIC_IMPORT_ROOTS,
 ]);
 
 /** This is advisory only. The isolated Python runtime parses the actual source with `ast`. */

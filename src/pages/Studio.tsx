@@ -382,6 +382,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const chatEl = (
       <ChatPanel
+        engineId={scene.engineId}
         messages={active?.messages ?? []}
         thinking={thinking}
         onSend={handleSend}
