@@ -50,6 +50,10 @@ export interface ManimGXBrowserSessionV1 extends EngineSessionV1 {
   revision: number;
   ready: Promise<void>;
   supportsMp4Export: boolean;
+  /** The newest requested load, including calls waiting for initial runtime authentication. */
+  requestSerial: number;
+  /** The source revision actually sent to the runtime; never use the creation-time context for events. */
+  activeContext?: EngineRequestContextV1;
   exports: Map<string, PendingExport>;
   disposed: boolean;
 }
@@ -60,6 +64,7 @@ function isMp4(bytes: Uint8Array): boolean {
 }
 
 async function mp4Blob(data: RuntimeMessage["data"]): Promise<Blob> {
+  if (data instanceof Blob && data.size > MAX_EXPORT_BYTES) throw new Error("MP4-файл превышает лимит экспорта 512 МБ.");
   const bytes = data instanceof Blob
     ? new Uint8Array(await data.arrayBuffer())
     : data instanceof ArrayBuffer
@@ -131,6 +136,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
       revision: 0,
       ready,
       supportsMp4Export: false,
+      requestSerial: 0,
       exports: new Map(),
       disposed: false,
       dispose: async () => {
@@ -148,7 +154,9 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     channel.port1.onmessage = ({ data }) => {
       const message = data as RuntimeMessage;
       if (message.protocol !== PROTOCOL || message.sessionId !== sessionId || typeof message.revision !== "number") return;
+      if (session.disposed) return;
       if (message.kind === "ready") {
+        if (message.revision !== 0 || message.requestId !== "connect") return;
         session.supportsMp4Export = message.capabilities?.mp4Export === true;
         window.clearTimeout(timer);
         resolveReady();
@@ -173,11 +181,13 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
           pendingExport.reject(new Error(message.detail ?? "ManimGX не смог сформировать MP4-файл."));
           return;
         }
-        onEvent({ ...context, type: "diagnostic", severity: "error", message: message.detail ?? "ManimGX runtime failed." });
-      } else if (message.kind === "rendered") {
-        onEvent({ ...context, type: "result", result: "rendered", detail: message.detail });
-      } else if (message.kind === "stopped") {
-        onEvent({ ...context, type: "state", state: "stopped" });
+        if (session.activeContext?.requestId === message.requestId) {
+          onEvent({ ...session.activeContext, type: "diagnostic", severity: "error", message: message.detail ?? "ManimGX runtime failed." });
+        }
+      } else if (session.activeContext?.requestId === message.requestId) {
+        const current = session.activeContext;
+        if (message.kind === "rendered") onEvent({ ...current, type: "result", result: "rendered", detail: message.detail });
+        else if (message.kind === "stopped") onEvent({ ...current, type: "state", state: "stopped" });
       }
     };
     iframe.addEventListener("load", () => {
@@ -192,7 +202,17 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     if (session.disposed) return { ok: false, reason: "unavailable", message: "ManimGX session has been disposed." };
     if (scene.language !== "python" || scene.dialect !== "manimgx-0.1.1") return { ok: false, reason: "invalid-source", message: "ManimGX runtime accepts the manimgx-0.1.1 dialect only." };
     if (new TextEncoder().encode(scene.source).byteLength > MAX_SOURCE_BYTES) return { ok: false, reason: "invalid-source", message: "Scene source exceeds the 256 KiB runtime limit." };
+    const serial = ++session.requestSerial;
     try { await session.ready; } catch (error) { await session.dispose(); return { ok: false, reason: "unavailable", message: error instanceof Error ? error.message : String(error) }; }
+    if (session.disposed || serial !== session.requestSerial) {
+      return { ok: false, reason: "unavailable", message: "Этот запуск ManimGX заменён более новой версией сцены." };
+    }
+    for (const pending of session.exports.values()) {
+      window.clearTimeout(pending.timeout);
+      pending.reject(new Error("Экспорт отменён: исходник сцены изменился."));
+    }
+    session.exports.clear();
+    session.activeContext = context;
     session.revision += 1;
     session.port.postMessage({ protocol: PROTOCOL, sessionId: session.id, revision: session.revision, requestId: context.requestId, kind: "run", source: scene.source });
     return { ok: true, value: undefined };
@@ -200,6 +220,10 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
 
   async stop(session: ManimGXBrowserSessionV1, context: EngineRequestContextV1): Promise<EngineResult<void>> {
     if (session.disposed) return { ok: true, value: undefined };
+    ++session.requestSerial;
+    await session.ready.catch(() => undefined);
+    if (session.disposed) return { ok: true, value: undefined };
+    session.activeContext = context;
     session.revision += 1;
     session.port.postMessage({ protocol: PROTOCOL, sessionId: session.id, revision: session.revision, requestId: context.requestId, kind: "cancel" });
     return { ok: true, value: undefined };

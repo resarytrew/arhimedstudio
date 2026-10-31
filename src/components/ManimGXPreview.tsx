@@ -25,6 +25,10 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
   diagnosticHandler.current = onDiagnostic;
   capabilityHandler.current = onMp4ExportCapabilityChange;
   const [message, setMessage] = useState<string | null>("Подключение изолированного ManimGX runtime…");
+  const [sessionVersion, setSessionVersion] = useState(0);
+  const sceneSource = scene.source;
+  const sceneRevision = scene.currentRevision;
+  const sceneId = scene.id;
 
   useImperativeHandle(ref, () => ({
     async exportMp4(filename, onProgress) {
@@ -46,12 +50,15 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
     },
   }), [projectId, scene.id, scene.currentRevision]);
 
+  // Initialize the expensive isolated Python/WebGPU runtime only when switching projects/scenes.
+  // Editing code must not discard the authenticated iframe and restart Pyodide.
   useEffect(() => {
     let cancelled = false;
     let session: ManimGXBrowserSessionV1 | undefined;
+    setSessionVersion(0);
     setMessage("Подключение изолированного ManimGX runtime…");
     capabilityHandler.current?.(false);
-    const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
+    const context = { projectId, sceneId, revision: sceneRevision, requestId: uid() };
     const adapter = new ManimGXBrowserAdapterV1(true);
     adapterRef.current = adapter;
     void (async () => {
@@ -65,16 +72,11 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
       });
       if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
       session = created.value;
-      sessionRef.current = session;
       if (!host.current || cancelled) { await session.dispose(); return; }
+      sessionRef.current = session;
       session.iframe.style.cssText = "width:100%;height:100%;border:0;background:#000";
       host.current.replaceChildren(session.iframe);
-      const loaded = await adapter.loadScene(session, context, scene);
-      if (!loaded.ok && !cancelled) {
-        setMessage(loaded.message);
-        diagnosticHandler.current?.(loaded.message);
-      }
-      if (!cancelled) capabilityHandler.current?.(session.supportsMp4Export);
+      setSessionVersion((version) => version + 1);
     })();
     return () => {
       cancelled = true;
@@ -83,7 +85,40 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
       if (adapterRef.current === adapter) adapterRef.current = undefined;
       void session?.dispose();
     };
-  }, [projectId, scene]);
+    // A scene revision is NOT a reason to restart Python.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, sceneId]);
+
+  // Update source in the live runtime. A later edit invalidates an earlier pending load.
+  useEffect(() => {
+    if (!sessionVersion) return;
+    const session = sessionRef.current;
+    const adapter = adapterRef.current;
+    if (!session || !adapter) return;
+    let cancelled = false;
+    const context = { projectId, sceneId, revision: sceneRevision, requestId: uid() };
+    setMessage("Выполнение сцены ManimGX…");
+    capabilityHandler.current?.(false);
+    // Python execution and GPU scene construction are expensive. Coalesce keystrokes
+    // so we submit only the most recent stable source to the long-lived runtime.
+    const timer = window.setTimeout(() => {
+      if (cancelled || sessionRef.current !== session) return;
+      void adapter.loadScene(session, context, {
+        source: sceneSource,
+        language: "python",
+        dialect: "manimgx-0.1.1",
+        entrypoint: "Scene.construct",
+      }).then((loaded) => {
+        if (cancelled || sessionRef.current !== session) return;
+        if (!loaded.ok && !(loaded.reason === "unavailable" && loaded.message.includes("заменён более новой"))) {
+          setMessage(loaded.message);
+          diagnosticHandler.current?.(loaded.message);
+        }
+        capabilityHandler.current?.(session.supportsMp4Export && loaded.ok);
+      });
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [projectId, sceneId, sceneRevision, sceneSource, sessionVersion]);
 
   return (
     <div className="relative h-full bg-black">
