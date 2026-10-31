@@ -1,5 +1,12 @@
 # ManimGX Runtime: MP4 export implementation
 
+The source overlay is synchronized with the runtime lifecycle extension.
+It requires the director's per-film lifecycle events and the checked wrapper
+hooks in the runtime's `vite.config.ts` from the same release. Deploy the
+runtime's complete `main` revision when upgrading from the October 16 baseline;
+copying only this overlay onto that old director no longer supplies full render
+completion. The MP4 capture also includes the fix for black WebGPU frames.
+
 This directory contains **deployable TypeScript source replacements** for the
 separate-origin runtime at `arhimed-runtime/arhimed-runtime.github.io`.
 Arhimed Studio continues to communicate only through the authenticated

@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 const RUNTIME_URL = "https://arhimed-runtime.github.io/cross-origin-runtime.html";
 
 /**
- * Protocol-only fixture. The 12-byte ftyp buffer is NOT a real playable MP4:
- * real codec/muxer checks must run against a GPU-equipped runtime.
+ * A small, previously WebCodecs-encoded H.264 fixture, decoded again by Studio.
+ * Real GPU capture is checked separately against the actual runtime.
  */
 const mockRuntime = String.raw`<!doctype html><html><body><script>
 let connected = false;
-const ftyp = new Uint8Array([0,0,0,12,102,116,121,112,105,115,111,109]);
+const ftyp = Uint8Array.from(atob("${readFileSync(new URL("./fixtures/valid-export.mp4", import.meta.url)).toString("base64")}"), char => char.charCodeAt(0));
 window.addEventListener("message", event => {
   if (connected || event.data?.protocol !== "arhimed-runtime-v1" ||
       event.data.kind !== "connect" || event.ports.length !== 1) return;

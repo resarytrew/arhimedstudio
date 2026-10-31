@@ -31,8 +31,8 @@ function cancelled(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException("MP4 export cancelled.", "AbortError");
 }
 
-/** Two frame callbacks give the native player's time setter time to paint on its WebGPU canvas. */
-function waitForDraw(signal: AbortSignal): Promise<void> {
+/** Capture after the player's queued draw, before WebGPU presents and clears its canvas. */
+function captureNextDraw(signal: AbortSignal, capture: () => void): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) return reject(new DOMException("Export cancelled.", "AbortError"));
     let done = false;
@@ -43,12 +43,17 @@ function waitForDraw(signal: AbortSignal): Promise<void> {
       reject(new DOMException("Export cancelled.", "AbortError"));
     };
     signal.addEventListener("abort", abort, { once: true });
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       if (done) return;
       done = true;
       signal.removeEventListener("abort", abort);
-      resolve();
-    }));
+      try {
+        capture();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
   });
 }
 
@@ -57,7 +62,7 @@ function waitForDraw(signal: AbortSignal): Promise<void> {
  *
  * The native player exposes seek via currentTime, but does not expose a direct
  * synchronous offline-render method. We therefore seek each exact timestamp
- * and await WebGPU presentation before copying the canvas. Playback speed and
+ * and copy the canvas after drawing but before WebGPU presentation. Playback speed and
  * encoding speed may differ; encoded timestamps remain evenly spaced.
  *
  * Current limitations: visual track only; source resolution is the WebGPU canvas
@@ -120,11 +125,13 @@ export async function exportManimGXMp4(element: HTMLElement, options: ExportSett
       cancelled(options.signal);
       const time = frame / options.fps;
       player.currentTime = time;
-      await waitForDraw(options.signal);
+      // currentTime queues the native player's draw first. Copy in the next
+      // callback of that SAME animation frame; waiting for a second frame reads
+      // an already-presented WebGPU drawing buffer and produces black video.
+      await captureNextDraw(options.signal, () => {
+        context.drawImage(source, 0, 0, width, height, 0, 0, width, height);
+      });
       cancelled(options.signal);
-      // Copy the runtime-owned canvas into a stable, opaque frame source.
-      // No parent-origin reads or cross-origin canvas tainting are involved.
-      context.drawImage(source, 0, 0, width, height, 0, 0, width, height);
       await track.add(time, 1 / options.fps);
       cancelled(options.signal);
       if (frame % Math.max(1, Math.floor(options.fps / 2)) === 0 || frame === frames - 1) {

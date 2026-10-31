@@ -43,6 +43,7 @@ export const MANIM_COLORS: Record<string, string> = {
 };
 
 const cache = new Map<string, [number, number, number]>();
+const MAX_COLOR_CACHE = 2000;
 let cctx: CanvasRenderingContext2D | null = null;
 
 export function parseColor(c: string): [number, number, number] {
@@ -75,6 +76,7 @@ export function parseColor(c: string): [number, number, number] {
       }
     }
   }
+  if (cache.size >= MAX_COLOR_CACHE) cache.clear();
   cache.set(c, res);
   return res;
 }

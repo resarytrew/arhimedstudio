@@ -168,15 +168,26 @@ function modifySpeed(code: string, factor: number) {
   return code
     .split("\n")
     .map((line) => {
-      let l = line.replace(/self\.wait\(([\d.]+)\)/g, (_, n) => `self.wait(${+(parseFloat(n) * factor).toFixed(2)})`);
+      let quote: string | null = null;
+      let commentAt = -1;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (quote) { if (c === "\\") i++; else if (c === quote) quote = null; }
+        else if (c === "\"" || c === "'") quote = c;
+        else if (c === "#") { commentAt = i; break; }
+      }
+      const body = commentAt < 0 ? line : line.slice(0, commentAt);
+      const comment = commentAt < 0 ? "" : line.slice(commentAt);
+      let l = body.replace(/self\.wait\(\s*([\d.]+)?\s*\)/g, (_, n) => `self.wait(${+(parseFloat(n || "1") * factor).toFixed(2)})`);
       if (/self\.play\(/.test(l)) {
         if (/run_time\s*=\s*[\d.]+/.test(l)) {
           l = l.replace(/run_time\s*=\s*([\d.]+)/, (_, n) => `run_time=${+(parseFloat(n) * factor).toFixed(2)}`);
-        } else if (/\)\s*$/.test(l)) {
-          l = l.replace(/\)\s*$/, `, run_time=${+factor.toFixed(2)})`);
+        } else {
+          const close = l.lastIndexOf(")");
+          if (close >= 0) l = `${l.slice(0, close)}, run_time=${+factor.toFixed(2)}${l.slice(close)}`;
         }
       }
-      return l;
+      return l + comment;
     })
     .join("\n");
 }
@@ -191,7 +202,10 @@ function estimatedDuration(code: string): number {
 
 function fitShortVideo(code: string): string {
   const duration = estimatedDuration(code);
-  return duration >= 7 && duration <= 10 ? code : modifySpeed(code, 8.5 / Math.max(duration, 0.1));
+  const hasImplicitPlay = code.split("\n").some((line) => /self\.play\s*\(/.test(line) && !/run_time\s*=/.test(line));
+  const hasImplicitWait = /self\.wait\s*\(\s*\)/.test(code);
+  if (duration >= 7 && duration <= 10) return hasImplicitPlay || hasImplicitWait ? modifySpeed(code, 1) : code;
+  return modifySpeed(code, 8.5 / Math.max(duration, 0.1));
 }
 
 function setBackground(code: string, color: string) {

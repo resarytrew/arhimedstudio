@@ -288,7 +288,7 @@ class Pythagoras(m.Scene):
         self.play(m.Write(la), m.Write(lb), m.Write(lc))
         self.wait(0.4)
 
-        formula = m.MathTex("a^2 + b^2 = c^2", font_size=60).shift(3.6*m.RIGHT + 0.6*m.UP)
+        formula = m.MathTex("a^2 + b^2 = c^2", font_size=52).shift(3.6*m.RIGHT + 0.6*m.UP)
         self.play(m.TransformFromCopy(la, formula))
         self.wait(0.4)
         check = m.MathTex("3^2 + 4^2 = 5^2", font_size=52, color=m.YELLOW).next_to(formula, m.DOWN, buff=0.6)
@@ -428,9 +428,138 @@ const STAGE_2_STARTERS: Omit<Template, "code">[] = [
   { id: "timeline-history", title: "Историческая шкала", prompt: "Создай историческую временную шкалу", keywords: ["истор", "временн", "эпох", "хронолог"], reply: "Подготовил нейтральную сцену временной шкалы: добавьте события, даты, источники и причинно-следственные связи." },
 ];
 
-TEMPLATES.push(
-  ...STAGE_2_STARTERS.map((starter) => ({
-    ...starter,
-    code: genericCode(starter.title),
-  }))
-);
+const STAGE_2_CODE: Record<string, string> = {
+  quadratic: `import manimx as m
+
+class Quadratic(m.Scene):
+    def construct(self):
+        title = m.Text("Квадратная функция", font_size=36).to_edge(m.UP)
+        axes = m.Axes(x_range=[-3, 3, 1], y_range=[-1, 8, 1], x_length=7, y_length=4.6)
+        graph = axes.plot(lambda x: x**2 - 2, color=m.BLUE, stroke_width=5)
+        vertex = m.Dot(axes.c2p(0, -2), color=m.YELLOW, radius=0.11)
+        label = m.MathTex("y = x^2 - 2", font_size=35).to_corner(m.UR)
+        self.play(m.Write(title), m.Create(axes))
+        self.play(m.Create(graph), m.FadeIn(vertex), m.Write(label))
+        self.play(m.Indicate(vertex))
+        self.wait(1)
+`,
+  newton: `import manimx as m
+
+class NewtonMethod(m.Scene):
+    def construct(self):
+        title = m.Text("Метод Ньютона", font_size=38).to_edge(m.UP)
+        axes = m.Axes(x_range=[-1, 3, 1], y_range=[-2, 7, 1], x_length=6, y_length=4.5)
+        graph = axes.plot(lambda x: x**2 - 2, color=m.BLUE, stroke_width=5)
+        p = axes.c2p(2, 2)
+        dot = m.Dot(p, color=m.YELLOW)
+        tangent = axes.plot(lambda x: 4*x - 6, x_range=[0.7, 2.4], color=m.ORANGE)
+        formula = m.MathTex("x_{n+1}=x_n-\\frac{f(x_n)}{f'(x_n)}", font_size=32).to_edge(m.DOWN)
+        self.play(m.Write(title), m.Create(axes), m.Create(graph))
+        self.play(m.FadeIn(dot), m.Create(tangent), m.Write(formula))
+        self.play(dot.animate.move_to(axes.c2p(1.5, 0.25)))
+        self.play(m.Indicate(formula))
+        self.wait(1)
+`,
+  "complex-plane": `import manimx as m
+
+class ComplexPlane(m.Scene):
+    def construct(self):
+        title = m.Text("Комплексная плоскость", font_size=36).to_edge(m.UP)
+        axes = m.Axes(x_range=[-3, 3, 1], y_range=[-2, 2, 1], x_length=7, y_length=4.5)
+        point = axes.c2p(2, 1)
+        vector = m.Arrow(axes.c2p(0, 0), point, buff=0, color=m.YELLOW)
+        dot = m.Dot(point, color=m.YELLOW)
+        label = m.MathTex("z = 2 + i", font_size=38, color=m.YELLOW).to_corner(m.UR)
+        real = m.Text("Re", font_size=24).move_to([3.6, -0.2, 0])
+        imag = m.Text("Im", font_size=24).move_to([-0.2, 2.1, 0])
+        self.play(m.Write(title), m.Create(axes))
+        self.play(m.GrowArrow(vector), m.FadeIn(dot), m.Write(label))
+        self.play(m.Write(real), m.Write(imag), m.Indicate(dot))
+        self.wait(1)
+`,
+  pendulum: `import manimx as m
+
+class Pendulum(m.Scene):
+    def construct(self):
+        title = m.Text("Колебания маятника", font_size=36).to_edge(m.UP)
+        pivot = m.Dot([0, 2, 0], color=m.WHITE)
+        bob = m.Dot([1.5, -0.7, 0], color=m.BLUE, radius=0.2)
+        rod = m.Line(pivot.get_center(), bob.get_center(), color=m.WHITE)
+        equilibrium = m.Line([0, 2, 0], [0, -1.4, 0], color=m.GRAY)
+        period = m.MathTex("T = 2\\pi\\sqrt{\\frac{l}{g}}", font_size=40, color=m.YELLOW).to_edge(m.DOWN)
+        self.play(m.Write(title), m.Create(equilibrium), m.FadeIn(pivot))
+        self.play(m.Create(rod), m.FadeIn(bob), m.Write(period))
+        for x in [0.8, 0, -0.8, 0]:
+            target = m.Dot([x, -0.9, 0], color=m.BLUE, radius=0.2)
+            line = m.Line(pivot.get_center(), target.get_center(), color=m.WHITE)
+            self.play(m.Transform(bob, target), m.Transform(rod, line), run_time=0.8)
+        self.wait(1)
+`,
+  energy: `import manimx as m
+
+class EnergyConservation(m.Scene):
+    def construct(self):
+        title = m.Text("Сохранение энергии", font_size=36).to_edge(m.UP)
+        ground = m.Line([-3, -2, 0], [3, -2, 0], color=m.WHITE)
+        ball = m.Dot([-2, -1.2, 0], color=m.YELLOW, radius=0.2)
+        potential = m.Rectangle(width=0.55, height=2.2, color=m.BLUE, fill_opacity=0.55).shift(2*m.LEFT + 0.1*m.DOWN)
+        kinetic = m.Rectangle(width=0.55, height=0.4, color=m.ORANGE, fill_opacity=0.55).shift(2*m.RIGHT + 0.8*m.DOWN)
+        labels = m.VGroup(m.Text("Eп", color=m.BLUE), m.Text("Eк", color=m.ORANGE)).arrange(m.RIGHT, buff=1.2).to_edge(m.DOWN)
+        total = m.MathTex("E_{п} + E_{к} = const", font_size=34).to_edge(m.UP).shift(0.6*m.DOWN)
+        self.play(m.Write(title), m.Create(ground), m.FadeIn(ball))
+        self.play(m.GrowFromCenter(potential), m.GrowFromCenter(kinetic), m.Write(labels), m.Write(total))
+        self.play(ball.animate.move_to([2, -1.2, 0]), m.Indicate(total))
+        self.wait(1)
+`,
+  ohm: `import manimx as m
+
+class OhmsLaw(m.Scene):
+    def construct(self):
+        title = m.Text("Закон Ома", font_size=40).to_edge(m.UP)
+        left = m.Line([-2.5, 0, 0], [-1.2, 0, 0], color=m.YELLOW)
+        resistor = m.Rectangle(width=1.5, height=0.65, color=m.ORANGE)
+        right = m.Line([1.2, 0, 0], [2.5, 0, 0], color=m.YELLOW)
+        battery = m.VGroup(m.Line([-2.5, -0.5, 0], [-2.5, 0.5, 0]), m.Line([-2.2, -0.3, 0], [-2.2, 0.3, 0])).shift(0.35*m.LEFT)
+        labels = m.VGroup(m.Text("U", color=m.BLUE), m.Text("I", color=m.GREEN), m.Text("R", color=m.ORANGE)).arrange(m.RIGHT, buff=1.0).to_edge(m.DOWN)
+        formula = m.MathTex("I = \\frac{U}{R}", font_size=48).shift(2*m.UP)
+        self.play(m.Write(title), m.Create(left), m.Create(resistor), m.Create(right), m.Create(battery))
+        self.play(m.Write(formula), m.Write(labels))
+        self.play(m.Indicate(resistor), m.Indicate(formula))
+        self.wait(1)
+`,
+  orbit: `import manimx as m
+
+class PlanetOrbit(m.Scene):
+    def construct(self):
+        title = m.Text("Орбита планеты", font_size=38).to_edge(m.UP)
+        orbit = m.Ellipse(width=6.5, height=3.4, color=m.BLUE)
+        star = m.Dot([-0.8, 0, 0], color=m.YELLOW, radius=0.25)
+        planet = m.Dot([2.3, 0, 0], color=m.BLUE, radius=0.15)
+        focus = m.Dot([-0.8, 0, 0], color=m.ORANGE, radius=0.08)
+        note = m.Text("Звезда находится в одном из фокусов", font_size=25).to_edge(m.DOWN)
+        self.play(m.Write(title), m.Create(orbit))
+        self.play(m.FadeIn(star), m.FadeIn(focus), m.FadeIn(planet), m.Write(note))
+        for position in [[1.3, 0.9, 0], [-2.8, 0, 0], [1.3, -0.9, 0], [2.3, 0, 0]]:
+            self.play(planet.animate.move_to(position), run_time=0.8)
+        self.wait(1)
+`,
+  "timeline-history": `import manimx as m
+
+class HistoryTimeline(m.Scene):
+    def construct(self):
+        title = m.Text("Историческая шкала", font_size=38).to_edge(m.UP)
+        line = m.Line([-5, 0, 0], [5, 0, 0], color=m.BLUE)
+        dates = ["1900", "1920", "1940", "1960", "1980"]
+        events = ["начало", "открытие", "перемены", "полёт", "связь"]
+        self.play(m.Write(title), m.Create(line))
+        for index in range(5):
+            x = -4 + index * 2
+            dot = m.Dot([x, 0, 0], color=m.YELLOW)
+            date = m.Text(dates[index], font_size=24).next_to(dot, m.UP, buff=0.25)
+            event = m.Text(events[index], font_size=21, color=m.TEAL).next_to(dot, m.DOWN, buff=0.25)
+            self.play(m.FadeIn(dot), m.Write(date), m.Write(event), run_time=0.7)
+        self.wait(1)
+`,
+};
+
+TEMPLATES.push(...STAGE_2_STARTERS.map((starter) => ({ ...starter, code: STAGE_2_CODE[starter.id] ?? genericCode(starter.title) })));

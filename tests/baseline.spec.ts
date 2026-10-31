@@ -217,7 +217,7 @@ test('Stage 2 registry keeps Canvas compatibility and does not persist provider 
   expect(result.gxAvailable).toBe(false);
   expect(result.gxProject.scenes).toHaveLength(2);
   expect(result.gxProject.scenes[0]).toMatchObject({engineId:'arhimed-canvas',source:legacy});
-  expect(result.gxProject.scenes[1]).toMatchObject({engineId:'manimgx-browser',dialect:'manimgx-0.1.1',source:legacy});
+  expect(result.gxProject.scenes[1]).toMatchObject({engineId:'manimgx-browser',dialect:'manimgx-0.1.1',source:''});
   expect(result.staleAccepted).toBeNull();
   await page.goto('/#/studio');
   await page.getByRole('button',{name:'Настройки ИИ'}).click();

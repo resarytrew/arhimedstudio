@@ -86,6 +86,12 @@ export function activeScene(project: Project): Scene {
   return project.scenes.find((scene) => scene.id === project.activeSceneId) ?? project.scenes[0];
 }
 
+export function setActiveScene(project: Project, sceneId: string): Project {
+  const scene = project.scenes.find((candidate) => candidate.id === sceneId);
+  if (!scene || scene.id === project.activeSceneId) return project;
+  return { ...project, activeSceneId: scene.id, code: scene.source, updatedAt: Date.now() };
+}
+
 export function normalizeProject(value: Project | LegacyProject): Project {
   if ("schemaVersion" in value && value.schemaVersion === 2 && Array.isArray(value.scenes) && value.scenes.length > 0) {
     const scene = value.scenes.find((candidate) => candidate.id === value.activeSceneId) ?? value.scenes[0];
@@ -108,10 +114,16 @@ export function normalizeProject(value: Project | LegacyProject): Project {
 export function updateSceneSource(project: Project, source: string): Project {
   const scene = activeScene(project);
   if (scene.source === source) return project;
+  const now = Date.now();
+  const last = scene.revisions.at(-1);
+  const coalesce = last?.kind === "manual" && now - last.createdAt < 2500;
   const revision: SceneRevision = {
-    id: uid(), number: scene.revisions.length + 1, kind: "manual", source, baseRevision: scene.currentRevision, createdAt: Date.now(),
+    id: uid(), number: coalesce ? last.number : scene.revisions.length + 1, kind: "manual", source,
+    baseRevision: coalesce ? last.baseRevision : scene.currentRevision, createdAt: now,
   };
-  const nextScene = { ...scene, source, currentRevision: revision.id, revisions: [...scene.revisions, revision] };
+  const revisions = coalesce ? [...scene.revisions.slice(0, -1), revision] : [...scene.revisions, revision];
+  const capped = revisions.length > 100 ? revisions.slice(-100) : revisions;
+  const nextScene = { ...scene, source, currentRevision: revision.id, revisions: capped };
   return { ...project, code: source, scenes: project.scenes.map((candidate) => (candidate.id === scene.id ? nextScene : candidate)), updatedAt: Date.now() };
 }
 
@@ -124,8 +136,8 @@ export function setActiveSceneEngine(project: Project, engineId: Extract<EngineI
   const now = Date.now();
   const revisionId = uid();
   const nextScene: Scene = engineId === "arhimed-canvas"
-    ? { ...scene, id: uid(), engineId, engineVersion: "canvas-interpreter-v1", language: "python", dialect: "arhimed-manimx-v1", entrypoint: "Scene.construct", currentRevision: revisionId, revisions: [{ id: revisionId, number: 1, kind: "initial", source: scene.source, createdAt: now }] }
-    : { ...scene, id: uid(), engineId, engineVersion: "manimgx-0.1.1-pyodide-v314.0.7", language: "python", dialect: "manimgx-0.1.1", entrypoint: "Scene.construct", currentRevision: revisionId, revisions: [{ id: revisionId, number: 1, kind: "initial", source: scene.source, createdAt: now }] };
+    ? { ...scene, id: uid(), engineId, engineVersion: "canvas-interpreter-v1", language: "python", dialect: "arhimed-manimx-v1", entrypoint: "Scene.construct", source: "", currentRevision: revisionId, revisions: [{ id: revisionId, number: 1, kind: "initial", source: "", createdAt: now }] }
+    : { ...scene, id: uid(), engineId, engineVersion: "manimgx-0.1.1-pyodide-v314.0.7", language: "python", dialect: "manimgx-0.1.1", entrypoint: "Scene.construct", source: "", currentRevision: revisionId, revisions: [{ id: revisionId, number: 1, kind: "initial", source: "", createdAt: now }] };
   return { ...project, code: nextScene.source, scenes: [...project.scenes, nextScene], activeSceneId: nextScene.id, updatedAt: now };
 }
 
@@ -164,7 +176,10 @@ function load<T>(key: string, fallback: T): T {
 export function usePersistent<T>(key: string, initial: () => T) {
   const [value, setValue] = useState<T>(() => load(key, initial()));
   useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage can be unavailable or full */ }
+    const save = () => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage can be unavailable or full */ } };
+    const timer = window.setTimeout(save, 400);
+    window.addEventListener("pagehide", save);
+    return () => { window.clearTimeout(timer); window.removeEventListener("pagehide", save); };
   }, [key, value]);
   return [value, setValue] as const;
 }

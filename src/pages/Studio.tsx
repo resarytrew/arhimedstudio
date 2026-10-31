@@ -5,6 +5,9 @@ import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
 import { Player, type PlayerHandle } from "../components/Player";
 import { ManimGXPreview, type ManimGXPreviewHandle } from "../components/ManimGXPreview";
+import { RenderJobsPanel } from "../components/RenderJobsPanel";
+import { RenderJobController, type RenderJob } from "../rendering/jobs";
+import { downloadVideoArtifact, lastSuccessfulVideo, saveSuccessfulVideo, type VideoArtifact } from "../rendering/video-artifacts";
 import { SettingsModal } from "../components/SettingsModal";
 import { Sidebar, type PanelId } from "../components/Sidebar";
 import type { Timeline } from "../engine/interpreter";
@@ -26,6 +29,7 @@ import {
   newProject,
   PROJECTS_KEY,
   setActiveSceneEngine,
+  setActiveScene,
   uid,
   updateSceneSource,
   usePersistent,
@@ -44,7 +48,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [projects, setProjects] = usePersistent<Project[]>(PROJECTS_KEY, initialProjects);
   const [activeId, setActiveId] = usePersistent<string>(ACTIVE_KEY, initialActiveProjectId);
   const [llmPreferences, setLlmPreferences] = usePersistent(LLM_KEY, initialLLM);
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useState(() => {
+    if (!llmPreferences.rememberKey) return "";
+    try { return localStorage.getItem("arhimed.llm.api-key") ?? ""; } catch { return ""; }
+  });
   const llm: LLMSettings = { ...llmPreferences, apiKey };
   const active = projects.find((p) => p.id === activeId) ?? projects[0];
 
@@ -71,6 +78,11 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [recording, setRecording] = useState<number | null>(null);
   const [gxMp4ExportAvailable, setGxMp4ExportAvailable] = useState(false);
+  const [previewJob, setPreviewJob] = useState<RenderJob | null>(null);
+  const [videoJob, setVideoJob] = useState<RenderJob | null>(null);
+  const [lastVideo, setLastVideo] = useState<VideoArtifact | null>(null);
+  const [videoStorageError, setVideoStorageError] = useState<string | null>(null);
+  const videoJobRef = useRef<RenderJobController | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
   const playerRef = useRef<PlayerHandle>(null);
@@ -87,13 +99,9 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   }, [projects, activeId, setProjects, setActiveId]);
 
   useEffect(() => {
-    const t0 = performance.now();
     loadEngineFonts().then(() => {
-      const wait = Math.max(0, 1100 - (performance.now() - t0));
-      setTimeout(() => {
-        setFontsReady(true);
-        setBooting(false);
-      }, wait);
+      setFontsReady(true);
+      setBooting(false);
     });
   }, []);
 
@@ -106,6 +114,21 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     ? scene.revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
     : undefined;
   const displayedCode = reviewCandidate?.source ?? code;
+  const selection = `${active.id}:${scene.id}`;
+  const selectionRef = useRef(selection); selectionRef.current = selection;
+
+  useEffect(() => {
+    let current = true;
+    setLastVideo(null); setVideoStorageError(null);
+    if (scene.engineId === "manimgx-browser") void lastSuccessfulVideo({ projectId: active.id, sceneId: scene.id }).then(artifact => {
+      if (current) setLastVideo(artifact ?? null);
+    }).catch(() => { if (current) setVideoStorageError("Хранилище последнего видео недоступно в этом браузере."); });
+    return () => { current = false; };
+  }, [active.id, scene.id, scene.engineId]);
+
+  useEffect(() => () => {
+    videoJobRef.current?.cancel("Экспорт отменён: сцена закрыта или её исходник изменился.");
+  }, [active.id, scene.id, scene.currentRevision]);
 
   // Canvas stays the default engine, now through EngineAdapterV1 rather than a universal scene format.
   useEffect(() => {
@@ -316,14 +339,38 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       showToast("Этот ManimGX runtime пока не поддерживает экспорт MP4.");
       return;
     }
+    let exportJob: RenderJobController | undefined;
     try {
       setRecording(0);
-      await gxPreviewRef.current.exportMp4(`${active.title || "arhimed"}.mp4`, (value) => setRecording(value));
-      showToast("Видео сохранено в формате MP4");
+      const context = { projectId: active.id, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
+      const capturedSelection = selection;
+      const job = new RenderJobController(context, "video-export", snapshot => {
+        setVideoJob(snapshot);
+      });
+      videoJobRef.current = job;
+      exportJob = job;
+      // Yield once so the queued state is observable before work starts.
+      await new Promise<void>(resolve => window.setTimeout(resolve, 0));
+      job.signal.throwIfAborted();
+      job.start(20 * 60_000, () => undefined);
+      const file = await gxPreviewRef.current.exportMp4(value => {
+        job.progress(value);
+        if (videoJobRef.current === job) setRecording(value);
+      }, job.signal);
+      const artifact = await saveSuccessfulVideo(context, `${active.title || "arhimed"}.mp4`, file, job.signal);
+      job.signal.throwIfAborted();
+      if (job.complete()) {
+        if (selectionRef.current === capturedSelection) { setLastVideo(artifact); setVideoStorageError(null); }
+        downloadVideoArtifact(artifact);
+        showToast("MP4 проверен и сохранён. Последняя успешная версия доступна после перезагрузки.");
+      }
     } catch (e) {
+      const job = exportJob;
+      if (e instanceof Error && e.name === "AbortError") job?.cancel(e.message);
+      else job?.fail(e);
       showToast(e instanceof Error ? e.message : "Не удалось сформировать MP4-видео");
     } finally {
-      setRecording(null);
+      if (!exportJob || videoJobRef.current === exportJob) setRecording(null);
     }
   };
 
@@ -339,9 +386,11 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const downloadPy = () => {
     const blob = new Blob([displayedCode], { type: "text/x-python" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${(timeline?.sceneName ?? "scene").toLowerCase()}.py`;
+    const href = URL.createObjectURL(blob);
+    a.href = href;
+    a.download = `${(displayedCode.match(/class\s+(\w+)/)?.[1] ?? timeline?.sceneName ?? "scene").toLowerCase()}.py`;
     a.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 1000);
   };
 
   // splitters
@@ -428,6 +477,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       onClose={() => togglePanel("preview")}
       actions={
         <>
+          {active.scenes.length > 1 && <select aria-label="Сцена проекта" value={scene.id} onChange={(e) => updateActive((project) => setActiveScene(project, e.target.value))} className="max-w-36 rounded-lg border border-slate-200 bg-transparent px-2 py-1 text-[11px] dark:border-white/10 dark:text-slate-200">{active.scenes.map((item, index) => <option key={item.id} value={item.id}>Сцена {index + 1} · {item.engineId === "manimgx-browser" ? "ManimGX" : "Canvas"}</option>)}</select>}
           <IconBtn
             onClick={() => void togglePreviewFullscreen()}
             title={previewFullscreen ? "Выйти из полноэкранного режима" : "Во весь экран"}
@@ -449,8 +499,9 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       className="h-full"
       bodyClassName="bg-black"
     >
-      <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative h-full bg-black">
-        {!hasSceneSource ? <div aria-label="Пустое превью" className="h-full bg-black" /> : scene.engineId === "manimgx-browser" ? <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} /> : <Player ref={playerRef} timeline={visibleTimeline} />}
+      <div className="flex h-full min-h-0 flex-col">
+      <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative min-h-0 flex-1 bg-black">
+        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
         {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
@@ -503,6 +554,16 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             </div>
           </div>
         )}
+      </div>
+      {scene.engineId === "manimgx-browser" && <RenderJobsPanel
+        preview={previewJob?.projectId === active.id && previewJob.sceneId === scene.id ? previewJob : null}
+        video={videoJob?.projectId === active.id && videoJob.sceneId === scene.id ? videoJob : null}
+        artifact={lastVideo} storageError={videoStorageError}
+        onCancelPreview={() => gxPreviewRef.current?.cancelRender()}
+        onRetry={() => gxPreviewRef.current?.retryRender()}
+        onCancelVideo={() => videoJobRef.current?.cancel()}
+        onDownloadLast={() => { if (lastVideo) downloadVideoArtifact(lastVideo); }}
+      />}
       </div>
     </Panel>
   );
@@ -640,6 +701,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           onSave={(v) => {
             setLlmPreferences({ provider: v.provider, baseUrl: v.baseUrl, model: v.model, rememberKey: v.rememberKey });
             setApiKey(v.apiKey);
+            try { if (v.rememberKey && v.apiKey) localStorage.setItem("arhimed.llm.api-key", v.apiKey); else localStorage.removeItem("arhimed.llm.api-key"); } catch { /* optional browser storage */ }
             setSettings(false);
             showToast(v.provider !== "offline" && v.apiKey ? `Подключена модель ${v.model}` : "Включён офлайн-ассистент");
           }}

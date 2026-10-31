@@ -3,133 +3,115 @@ import { Loader2 } from "lucide-react";
 import { ManimGXBrowserAdapterV1, type ManimGXBrowserSessionV1 } from "../engines/manimgx-browser-adapter";
 import type { Scene } from "../lib/store";
 import { uid } from "../lib/store";
+import { isJobActive, RenderJobController, type RenderJob } from "../rendering/jobs";
 
 interface Props {
   projectId: string;
   scene: Scene;
   onDiagnostic?: (message: string) => void;
   onMp4ExportCapabilityChange?: (available: boolean) => void;
+  onJobChange?: (job: RenderJob) => void;
 }
-
 export interface ManimGXPreviewHandle {
-  exportMp4: (filename: string, onProgress: (value: number) => void) => Promise<void>;
+  exportMp4: (onProgress: (value: number) => void, signal: AbortSignal) => Promise<Blob>;
+  cancelRender: () => void;
+  retryRender: () => void;
 }
 
-/** The Python runtime remains in a cross-origin sandbox and never receives Studio storage or credentials. */
-export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function ManimGXPreview({ projectId, scene, onDiagnostic, onMp4ExportCapabilityChange }, ref) {
+/** Parent-owned deadlines can destroy the iframe even while Python loops in its Worker. */
+export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function ManimGXPreview(props, ref) {
+  const { projectId, scene } = props;
+  const callbacks = useRef(props); callbacks.current = props;
   const host = useRef<HTMLDivElement>(null);
-  const diagnosticHandler = useRef(onDiagnostic);
-  const capabilityHandler = useRef(onMp4ExportCapabilityChange);
   const sessionRef = useRef<ManimGXBrowserSessionV1 | undefined>(undefined);
-  const adapterRef = useRef<ManimGXBrowserAdapterV1 | undefined>(undefined);
-  diagnosticHandler.current = onDiagnostic;
-  capabilityHandler.current = onMp4ExportCapabilityChange;
-  const [message, setMessage] = useState<string | null>("Подключение изолированного ManimGX runtime…");
-  const [sessionVersion, setSessionVersion] = useState(0);
-  const sceneSource = scene.source;
-  const sceneRevision = scene.currentRevision;
-  const sceneId = scene.id;
+  const adapterRef = useRef(new ManimGXBrowserAdapterV1(true));
+  const jobRef = useRef<RenderJobController | undefined>(undefined);
+  const requestRef = useRef("");
+  const [retry, setRetry] = useState(0);
+  const [jobState, setJobState] = useState<RenderJob | null>(null);
+
+  const terminate = () => {
+    void sessionRef.current?.dispose();
+    sessionRef.current = undefined;
+    callbacks.current.onMp4ExportCapabilityChange?.(false);
+  };
 
   useImperativeHandle(ref, () => ({
-    async exportMp4(filename, onProgress) {
+    async exportMp4(onProgress, signal) {
       const session = sessionRef.current;
-      const adapter = adapterRef.current;
-      if (!session || !adapter) throw new Error("ManimGX ещё не готов к экспорту.");
-      const file = await adapter.exportMp4(session, {
-        projectId,
-        sceneId: scene.id,
-        revision: scene.currentRevision,
-        requestId: uid(),
-      }, { onProgress });
-      const url = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 4_000);
+      if (!session || session.disposed) throw new Error("ManimGX ещё не готов к экспорту. Повторите рендеринг.");
+      return adapterRef.current.exportMp4(session, { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() }, { onProgress, signal });
     },
+    cancelRender: () => jobRef.current?.cancel(),
+    retryRender: () => setRetry(value => value + 1),
   }), [projectId, scene.id, scene.currentRevision]);
 
-  // Initialize the expensive isolated Python/WebGPU runtime only when switching projects/scenes.
-  // Editing code must not discard the authenticated iframe and restart Pyodide.
   useEffect(() => {
-    let cancelled = false;
-    let session: ManimGXBrowserSessionV1 | undefined;
-    setSessionVersion(0);
-    setMessage("Подключение изолированного ManimGX runtime…");
-    capabilityHandler.current?.(false);
-    const context = { projectId, sceneId, revision: sceneRevision, requestId: uid() };
-    const adapter = new ManimGXBrowserAdapterV1(true);
-    adapterRef.current = adapter;
-    void (async () => {
-      const created = await adapter.createSession(context, (event) => {
-        if (cancelled) return;
-        if (event.type === "diagnostic") {
-          setMessage(event.message);
-          diagnosticHandler.current?.(event.message);
-        }
-        if (event.type === "result" && event.result === "rendered") {
-          setMessage(null);
-          capabilityHandler.current?.(sessionRef.current?.supportsMp4Export === true
-            && sessionRef.current.renderedRevision === sessionRef.current.revision);
-        }
-      });
-      if (!created.ok) { if (!cancelled) setMessage(created.message); return; }
-      session = created.value;
-      if (!host.current || cancelled) { await session.dispose(); return; }
-      sessionRef.current = session;
-      session.iframe.style.cssText = "width:100%;height:100%;border:0;background:#000";
-      host.current.replaceChildren(session.iframe);
-      setSessionVersion((version) => version + 1);
-    })();
-    return () => {
-      cancelled = true;
-      capabilityHandler.current?.(false);
-      if (sessionRef.current === session) sessionRef.current = undefined;
-      if (adapterRef.current === adapter) adapterRef.current = undefined;
-      void session?.dispose();
-    };
-    // A scene revision is NOT a reason to restart Python.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, sceneId]);
+    return () => { jobRef.current?.cancel("Сцена закрыта."); terminate(); };
+  }, [projectId, scene.id]);
 
-  // Update source in the live runtime. A later edit invalidates an earlier pending load.
   useEffect(() => {
-    if (!sessionVersion) return;
-    const session = sessionRef.current;
-    const adapter = adapterRef.current;
-    if (!session || !adapter) return;
-    let cancelled = false;
-    const context = { projectId, sceneId, revision: sceneRevision, requestId: uid() };
-    setMessage("Выполнение сцены ManimGX…");
-    capabilityHandler.current?.(false);
-    // Python execution and GPU scene construction are expensive. Coalesce keystrokes
-    // so we submit only the most recent stable source to the long-lived runtime.
+    const context = { projectId, sceneId: scene.id, revision: scene.currentRevision, requestId: uid() };
+    requestRef.current = context.requestId;
+    const job = new RenderJobController(context, "preview", snapshot => {
+      if (requestRef.current !== snapshot.requestId) return;
+      setJobState(snapshot);
+      callbacks.current.onJobChange?.(snapshot);
+    });
+    jobRef.current = job;
+    callbacks.current.onDiagnostic?.("");
+    callbacks.current.onMp4ExportCapabilityChange?.(false);
+    if (!scene.source.trim()) {
+      job.cancel("Добавьте код сцены, чтобы запустить превью.");
+      return () => job.cancel("Сцена очищена.");
+    }
     const timer = window.setTimeout(() => {
-      if (cancelled || sessionRef.current !== session) return;
-      void adapter.loadScene(session, context, {
-        source: sceneSource,
-        language: "python",
-        dialect: "manimgx-0.1.1",
-        entrypoint: "Scene.construct",
-      }).then((loaded) => {
-        if (cancelled || sessionRef.current !== session) return;
-        if (!loaded.ok && !(loaded.reason === "unavailable" && loaded.message.includes("заменён более новой"))) {
-          setMessage(loaded.message);
-          diagnosticHandler.current?.(loaded.message);
+      void (async () => {
+        job.start(5 * 60_000, terminate);
+        try {
+          let session = sessionRef.current;
+          if (!session || session.disposed) {
+            const created = await adapterRef.current.createSession(context, event => {
+              if (event.type === "state" && event.state === "disposed") callbacks.current.onMp4ExportCapabilityChange?.(false);
+              const current = jobRef.current;
+              if (!current || event.requestId !== current.snapshot.requestId || !isJobActive(current.snapshot)) return;
+              if (event.type === "diagnostic" && event.severity === "info") current.stage(event.message);
+              if (event.type === "log") current.log(event.stream, event.text);
+              if (event.type === "diagnostic" && event.severity === "error") {
+                current.log("stderr", event.message);
+                current.fail(new Error(event.message));
+                callbacks.current.onDiagnostic?.(event.message);
+              }
+              if (event.type === "result" && event.result === "rendered") {
+                current.complete();
+                callbacks.current.onMp4ExportCapabilityChange?.(sessionRef.current?.supportsMp4Export === true);
+              }
+            });
+            if (!created.ok) throw new Error(created.message);
+            session = created.value;
+            if (job.signal.aborted || requestRef.current !== context.requestId || !host.current) { await session.dispose(); return; }
+            sessionRef.current = session;
+            session.iframe.style.cssText = "width:100%;height:100%;border:0;background:#000";
+            host.current.replaceChildren(session.iframe);
+          }
+          const loaded = await adapterRef.current.loadScene(session, context, { source: scene.source, language: "python", dialect: "manimgx-0.1.1", entrypoint: "Scene.construct" });
+          if (job.signal.aborted) return;
+          if (!loaded.ok) throw new Error(loaded.message);
+        } catch (error) {
+          if (!job.signal.aborted) {
+            job.fail(error);
+            callbacks.current.onDiagnostic?.(error instanceof Error ? error.message : String(error));
+          }
         }
-        capabilityHandler.current?.(session.supportsMp4Export && loaded.ok && session.renderedRevision === session.revision);
-      });
+      })();
     }, 350);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [projectId, sceneId, sceneRevision, sceneSource, sessionVersion]);
+    return () => { window.clearTimeout(timer); job.cancel("Запуск заменён новой ревизией сцены."); };
+  }, [projectId, scene.id, scene.currentRevision, scene.source, retry]);
 
-  return (
-    <div className="relative h-full bg-black">
-      <div ref={host} className="h-full" />
-      {message && <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-lg bg-slate-950/75 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur">
-        <Loader2 size={12} className="animate-spin text-cyan-300" /> {message}
-      </div>}
-    </div>
-  );
+  return <div className="relative h-full bg-black">
+    <div ref={host} className="h-full" />
+    {isJobActive(jobState) && <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-lg bg-slate-950/75 px-2.5 py-1.5 text-[11px] text-slate-200">
+      <Loader2 size={12} className="animate-spin text-cyan-300" /> {jobState?.status === "queued" ? "Рендеринг в очереди…" : jobState?.stage ?? "Выполнение сцены ManimGX…"}
+    </div>}
+  </div>;
 });

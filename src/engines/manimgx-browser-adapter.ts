@@ -20,7 +20,8 @@ interface RuntimeMessage {
   sessionId?: string;
   revision?: number;
   requestId?: string;
-  kind?: "ready" | "status" | "rendered" | "stopped" | "failed" | "rejected" | "export-progress" | "exported";
+  kind?: "ready" | "status" | "rendered" | "stopped" | "failed" | "rejected" | "export-progress" | "exported" | "export-cancelled" | "render-log";
+  stream?: "stdout" | "stderr";
   detail?: string;
   /** Only present on `ready` and is deliberately capability-based for older runtimes. */
   capabilities?: { mp4Export?: boolean };
@@ -34,11 +35,13 @@ interface PendingExport {
   reject: (reason: Error) => void;
   onProgress: (value: number) => void;
   timeout: number;
+  cleanup: () => void;
 }
 
 export interface ManimGXMp4ExportOptions {
   fps?: number;
   onProgress: (value: number) => void;
+  signal?: AbortSignal;
 }
 
 const MAX_EXPORT_BYTES = 512 * 1024 * 1024;
@@ -56,6 +59,7 @@ export interface ManimGXBrowserSessionV1 extends EngineSessionV1 {
   /** The source revision actually sent to the runtime; never use the creation-time context for events. */
   activeContext?: EngineRequestContextV1;
   exports: Map<string, PendingExport>;
+  cancellations: Map<string, number>;
   disposed: boolean;
 }
 
@@ -128,6 +132,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     let resolveReady: () => void = () => undefined;
     let rejectReady: (error: Error) => void = () => undefined;
     const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+    void ready.catch(() => undefined);
     const timer = window.setTimeout(() => rejectReady(new Error("ManimGX runtime did not authenticate within 12 seconds.")), 12_000);
     const session: ManimGXBrowserSessionV1 = {
       id: sessionId,
@@ -140,17 +145,23 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
       renderedRevision: 0,
       requestSerial: 0,
       exports: new Map(),
+      cancellations: new Map(),
       disposed: false,
       dispose: async () => {
+        if (session.disposed) return;
         session.disposed = true;
         window.clearTimeout(timer);
+        rejectReady(new DOMException("Сессия ManimGX закрыта.", "AbortError"));
         for (const pending of session.exports.values()) {
-          window.clearTimeout(pending.timeout);
-          pending.reject(new Error("Экспорт MP4 отменён: сессия ManimGX закрыта."));
+          pending.cleanup();
+          pending.reject(new DOMException("Экспорт MP4 отменён: сессия ManimGX закрыта.", "AbortError"));
         }
         session.exports.clear();
+        session.cancellations.forEach(timer => window.clearTimeout(timer));
+        session.cancellations.clear();
         channel.port1.close();
         iframe.remove();
+        onEvent({ ...(session.activeContext ?? context), type: "state", state: "disposed" });
       },
     };
     channel.port1.onmessage = ({ data }) => {
@@ -165,21 +176,31 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
         return;
       }
       if (message.revision !== session.revision || !message.requestId) return;
+      if (message.kind === "export-cancelled") {
+        window.clearTimeout(session.cancellations.get(message.requestId));
+        session.cancellations.delete(message.requestId);
+        return;
+      }
       const pendingExport = session.exports.get(message.requestId);
       if (message.kind === "export-progress" && pendingExport) {
         pendingExport.onProgress(Math.max(0, Math.min(1, Number(message.progress) || 0)));
         return;
       }
       if (message.kind === "exported" && pendingExport) {
-        session.exports.delete(message.requestId);
-        window.clearTimeout(pendingExport.timeout);
-        void mp4Blob(message.data).then(pendingExport.resolve, pendingExport.reject);
+        const requestId = message.requestId;
+        void mp4Blob(message.data).then(file => {
+          if (session.exports.get(requestId) !== pendingExport) return;
+          session.exports.delete(requestId); pendingExport.cleanup(); pendingExport.resolve(file);
+        }, error => {
+          if (session.exports.get(requestId) !== pendingExport) return;
+          session.exports.delete(requestId); pendingExport.cleanup(); pendingExport.reject(error);
+        });
         return;
       }
       if (message.kind === "failed" || message.kind === "rejected") {
         if (pendingExport) {
           session.exports.delete(message.requestId);
-          window.clearTimeout(pendingExport.timeout);
+          pendingExport.cleanup();
           pendingExport.reject(new Error(message.detail ?? "ManimGX не смог сформировать MP4-файл."));
           return;
         }
@@ -188,6 +209,10 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
         }
       } else if (session.activeContext?.requestId === message.requestId) {
         const current = session.activeContext;
+        if (message.kind === "status") onEvent({ ...current, type: "diagnostic", severity: "info", message: String(message.detail ?? "") });
+        if (message.kind === "render-log" && (message.stream === "stdout" || message.stream === "stderr")) {
+          onEvent({ ...current, type: "log", stream: message.stream, text: String(message.detail ?? "").slice(-16_000) });
+        }
         if (message.kind === "rendered") {
           session.renderedRevision = message.revision;
           onEvent({ ...current, type: "result", result: "rendered", detail: message.detail });
@@ -213,10 +238,12 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
       return { ok: false, reason: "unavailable", message: "Этот запуск ManimGX заменён более новой версией сцены." };
     }
     for (const pending of session.exports.values()) {
-      window.clearTimeout(pending.timeout);
-      pending.reject(new Error("Экспорт отменён: исходник сцены изменился."));
+      pending.cleanup();
+      pending.reject(new DOMException("Экспорт отменён: исходник сцены изменился.", "AbortError"));
     }
     session.exports.clear();
+    session.cancellations.forEach(timer => window.clearTimeout(timer));
+    session.cancellations.clear();
     session.activeContext = context;
     session.revision += 1;
     session.renderedRevision = 0;
@@ -229,6 +256,9 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     ++session.requestSerial;
     await session.ready.catch(() => undefined);
     if (session.disposed) return { ok: true, value: undefined };
+    for (const pending of session.exports.values()) { pending.cleanup(); pending.reject(new DOMException("Экспорт отменён.", "AbortError")); }
+    session.exports.clear();
+    session.cancellations.forEach(timer => window.clearTimeout(timer)); session.cancellations.clear();
     session.activeContext = context;
     session.revision += 1;
     session.renderedRevision = 0;
@@ -241,8 +271,11 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
    * That keeps the sandbox boundary intact and avoids a misleading .mp4 extension on WebM data.
    */
   async exportMp4(session: ManimGXBrowserSessionV1, context: EngineRequestContextV1, options: ManimGXMp4ExportOptions): Promise<Blob> {
+    options.signal?.throwIfAborted();
     if (session.disposed) throw new Error("Сессия ManimGX уже закрыта.");
     await session.ready;
+    options.signal?.throwIfAborted();
+    if (session.disposed) throw new Error("Сессия ManimGX уже закрыта.");
     if (!session.supportsMp4Export) {
       throw new Error("Подключённый ManimGX runtime ещё не поддерживает экспорт MP4. Обновите runtime до версии с протоколом export-mp4.");
     }
@@ -250,15 +283,27 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
       throw new Error("Дождитесь завершения отрисовки текущей сцены ManimGX перед экспортом.");
     }
     const requestId = context.requestId;
-    if (session.exports.has(requestId)) throw new Error("Экспорт MP4 уже выполняется.");
+    if (session.exports.size || session.cancellations.size) throw new Error("Экспорт MP4 уже выполняется или отменяется.");
     return new Promise<Blob>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         const pending = session.exports.get(requestId);
         if (!pending) return;
         session.exports.delete(requestId);
+        pending.cleanup();
         reject(new Error("ManimGX не сформировал MP4 за отведённое время."));
+        void session.dispose();
       }, MP4_EXPORT_TIMEOUT_MS);
-      session.exports.set(requestId, { resolve, reject, onProgress: options.onProgress, timeout });
+      const abort = () => {
+        if (!session.exports.has(requestId)) return;
+        session.exports.delete(requestId); cleanup();
+        reject(options.signal?.reason instanceof Error ? options.signal.reason : new DOMException("Экспорт отменён.", "AbortError"));
+        if (options.signal?.reason?.name === "TimeoutError") { void session.dispose(); return; }
+        session.port.postMessage({ protocol: PROTOCOL, sessionId: session.id, revision: session.revision, requestId, kind: "cancel-export" });
+        session.cancellations.set(requestId, window.setTimeout(() => { session.cancellations.delete(requestId); void session.dispose(); }, 1500));
+      };
+      const cleanup = () => { window.clearTimeout(timeout); options.signal?.removeEventListener("abort", abort); };
+      session.exports.set(requestId, { resolve, reject, onProgress: options.onProgress, timeout, cleanup });
+      options.signal?.addEventListener("abort", abort, { once: true });
       // The runtime owns the rendered canvas and returns a transferable MP4 byte buffer.
       // Source code is not resent here; this command exports the currently rendered revision.
       session.port.postMessage({

@@ -14,7 +14,9 @@ let revision = 0;
 let active: HTMLElement | undefined;
 let renderedRevision = 0;
 let exportAbort: AbortController | undefined;
+let exportRequestId = "";
 let watchTimer: number | undefined;
+let pythonCompleted = false;
 
 // The patched v0.1.1 director receives this as its immutable asset base. It derives all
 // package URLs from here, and never sends a package name to a resolver.
@@ -65,7 +67,7 @@ function watch(command: RuntimeCommand) {
     }
     const canvas = active?.shadowRoot?.querySelector("canvas") as HTMLCanvasElement | null;
     const player = active as (HTMLElement & { duration?: number }) | undefined;
-    if (canvas && !message && canvas.width > 0 && canvas.height > 0 && Number.isFinite(player?.duration)) {
+    if (pythonCompleted && canvas && !message && canvas.width > 0 && canvas.height > 0 && Number.isFinite(player?.duration)) {
       window.clearInterval(timer);
       renderedRevision = command.revision;
       reply(command, "rendered", `WebGPU player reported a rendered scene in ${Math.round(performance.now() - started)} ms.`, { canvasWidth: canvas.width, canvasHeight: canvas.height, duration: player?.duration ?? null });
@@ -76,6 +78,13 @@ function watch(command: RuntimeCommand) {
 
 function handle(command: RuntimeCommand) {
   if (command.protocol !== CROSS_ORIGIN_PROTOCOL || command.sessionId !== sessionId || !Number.isSafeInteger(command.revision) || !command.requestId) return;
+  if (command.kind === "cancel-export") {
+    if (command.revision === revision && (!exportAbort || exportRequestId === command.requestId)) {
+      if (exportAbort) exportAbort.abort();
+      else reply(command, "export-cancelled", "No MP4 export remains active.");
+    }
+    return;
+  }
   // Export operates on the currently rendered revision. It is not a source update.
   if (command.kind === "export-mp4") {
     if (command.revision !== revision || renderedRevision !== revision || !active) {
@@ -89,6 +98,7 @@ function handle(command: RuntimeCommand) {
     const player = active;
     const controller = new AbortController();
     exportAbort = controller;
+    exportRequestId = command.requestId;
     void (async () => {
       try {
         const data = await exportManimGXMp4(player, {
@@ -110,11 +120,13 @@ function handle(command: RuntimeCommand) {
           kind: "exported", detail: "H.264 MP4 export complete.", data,
         } satisfies RuntimeEvent, [data]);
       } catch (error) {
-        if (!controller.signal.aborted && active === player && revision === command.revision) {
+        if (controller.signal.aborted && active === player && revision === command.revision) {
+          reply(command, "export-cancelled", "MP4 export cancelled.");
+        } else if (active === player && revision === command.revision) {
           reply(command, "failed", error instanceof Error ? error.message : String(error));
         }
       } finally {
-        if (exportAbort === controller) exportAbort = undefined;
+        if (exportAbort === controller) { exportAbort = undefined; exportRequestId = ""; }
       }
     })();
     return;
@@ -123,6 +135,7 @@ function handle(command: RuntimeCommand) {
   // New commands invalidate a previous export and any previous rendered revision.
   exportAbort?.abort();
   renderedRevision = 0;
+  pythonCompleted = false;
   revision = command.revision;
   if (command.kind === "probe") { void probe().then((data) => reply(command, "probe", "Cross-origin isolation probes completed.", data)); return; }
   if (command.kind === "cancel") {
@@ -142,6 +155,22 @@ function handle(command: RuntimeCommand) {
   active = document.createElement("manimgx-player");
   active.setAttribute("autoplay", "");
   (active as HTMLElement & { source: string }).source = command.source;
+  const player = active;
+  player.addEventListener("arhimed-status", ((event: CustomEvent) => {
+    if (active !== player || revision !== command.revision) return;
+    reply(command, "status", String(event.detail ?? ""));
+  }) as EventListener);
+  player.addEventListener("arhimed-render", ((event: CustomEvent) => {
+    if (active !== player || revision !== command.revision) return;
+    const detail = event.detail as { kind: string; detail: string; stream?: "stdout" | "stderr" };
+    if (detail.kind === "completed") pythonCompleted = true;
+    if (detail.kind === "failed") {
+      if (watchTimer !== undefined) window.clearInterval(watchTimer);
+      renderedRevision = 0;
+      reply(command, "failed", detail.detail || "Python scene construction failed.");
+    }
+    if (detail.kind === "log") port?.postMessage({ protocol: CROSS_ORIGIN_PROTOCOL, sessionId, revision: command.revision, requestId: command.requestId, kind: "render-log", detail: detail.detail, stream: detail.stream } satisfies RuntimeEvent);
+  }) as EventListener);
   root.append(active);
   status.textContent = `ManimGX ${command.label ?? "scene"} boot requested.`;
   reply(command, "status", status.textContent);

@@ -10,6 +10,7 @@ export type Node =
   | { t: "neg"; v: Node }
   | { t: "not"; v: Node }
   | { t: "list"; items: Node[] }
+  | { t: "comp"; expr: Node; vars: string[]; iter: Node; cond?: Node }
   | { t: "dict"; entries: [Node, Node][] }
   | { t: "lambda"; params: string[]; body: Node }
   | { t: "cond"; c: Node; a: Node; b: Node };
@@ -114,13 +115,43 @@ class Parser {
     const t = this.peek(o);
     return t.t === "op" && t.v === v;
   }
-  isName(v: string) {
-    const t = this.peek();
+  isName(v: string, o = 0) {
+    const t = this.peek(o);
     return t.t === "name" && t.v === v;
+  }
+  expectName(v: string) {
+    if (!this.isName(v)) throw new ParseError(`Ожидалось «${v}», найдено «${this.peek().v || "конец строки"}»`);
+    this.next();
   }
   expect(v: string) {
     if (!this.isOp(v)) throw new ParseError(`Ожидалось «${v}», найдено «${this.peek().v || "конец строки"}»`);
     this.next();
+  }
+
+  private parseCompTail(firstExpr: Node, closeOp: string): Node {
+    this.expectName("for");
+    const vars: string[] = [];
+    if (this.isOp("(")) {
+      this.next();
+      while (!this.isOp(")")) {
+        const t = this.next();
+        if (t.t === "name") vars.push(t.v);
+        else if (!(t.t === "op" && t.v === ",")) throw new ParseError("Ожидалось имя переменной в генераторе");
+      }
+      this.expect(")");
+    } else {
+      while (!this.isName("in")) {
+        const t = this.next();
+        if (t.t === "name") vars.push(t.v);
+        else if (!(t.t === "op" && t.v === ",")) throw new ParseError("Ожидалось имя переменной в генераторе");
+      }
+    }
+    this.expectName("in");
+    const iter = this.or();
+    let cond: Node | undefined;
+    if (this.isName("if")) { this.next(); cond = this.or(); }
+    this.expect(closeOp);
+    return { t: "comp", expr: firstExpr, vars, iter, cond };
   }
 
   expr(): Node {
@@ -230,6 +261,7 @@ class Parser {
         this.next();
         const args: { spread: boolean; v: Node }[] = [];
         const kwargs: Record<string, Node> = {};
+        let generatorClosed = false;
         while (!this.isOp(")")) {
           if (this.peek().t === "eof") throw new ParseError("Ожидалась «)», найден конец строки");
           if (this.peek().t === "name" && this.isOp("=", 1)) {
@@ -240,12 +272,18 @@ class Parser {
             this.next();
             args.push({ spread: true, v: this.expr() });
           } else {
-            args.push({ spread: false, v: this.expr() });
+            const val = this.expr();
+            if (args.length === 0 && Object.keys(kwargs).length === 0 && this.isName("for")) {
+              args.push({ spread: false, v: this.parseCompTail(val, ")") });
+              generatorClosed = true;
+              break;
+            }
+            args.push({ spread: false, v: val });
           }
           if (this.isOp(",")) this.next();
           else if (!this.isOp(")")) throw new ParseError("Ожидалась «,» или «)»");
         }
-        this.expect(")");
+        if (!generatorClosed) this.expect(")");
         n = { t: "call", fn: n, args, kwargs };
       } else if (this.isOp("[")) {
         this.next();
@@ -272,6 +310,7 @@ class Parser {
         return { t: "list", items: [] };
       }
       const first = this.expr();
+      if (this.isName("for")) return this.parseCompTail(first, ")");
       if (this.isOp(",")) {
         const items = [first];
         while (this.isOp(",")) {
@@ -286,7 +325,12 @@ class Parser {
       return first;
     }
     if (t.t === "op" && t.v === "[") {
-      const items: Node[] = [];
+      if (this.isOp("]")) { this.next(); return { t: "list", items: [] }; }
+      const first = this.expr();
+      if (this.isName("for")) return this.parseCompTail(first, "]");
+      const items: Node[] = [first];
+      if (this.isOp(",")) this.next();
+      else if (!this.isOp("]")) throw new ParseError("Ожидалась «,» или «]»");
       while (!this.isOp("]")) {
         if (this.peek().t === "eof") throw new ParseError("Ожидалась «]», найден конец строки");
         items.push(this.expr());

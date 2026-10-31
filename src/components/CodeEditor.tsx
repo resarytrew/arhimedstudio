@@ -8,12 +8,12 @@ const KW = new Set([
 const CONST = new Set(["True", "False", "None"]);
 
 function esc(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function colorOf(token: string): string | null {
   const s = token.slice(1, -1);
-  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) || /^rgba?\(/i.test(s)) return s;
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) || /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i.test(s)) return s;
   return null;
 }
 
@@ -54,18 +54,42 @@ export function highlight(code: string): string {
   return out + "\n";
 }
 
+interface DiffLine { kind: "same" | "add" | "del"; text: string }
+function computeLineDiff(beforeText: string, afterText: string): DiffLine[] {
+  const before = beforeText ? beforeText.split("\n") : [];
+  const after = afterText ? afterText.split("\n") : [];
+  const out: DiffLine[] = [];
+  let i = 0, j = 0;
+  while (i < before.length || j < after.length) {
+    if (i < before.length && j < after.length && before[i] === after[j]) out.push({ kind: "same", text: after[j++] }), i++;
+    else if (j + 1 < after.length && i < before.length && before[i] === after[j + 1]) out.push({ kind: "add", text: after[j++] });
+    else if (i + 1 < before.length && j < after.length && before[i + 1] === after[j]) out.push({ kind: "del", text: before[i++] });
+    else {
+      if (i < before.length) out.push({ kind: "del", text: before[i++] });
+      if (j < after.length) out.push({ kind: "add", text: after[j++] });
+    }
+  }
+  return out;
+}
+
 interface Props {
   value: string;
   onChange: (v: string) => void;
   errorLine?: number | null;
   readOnly?: boolean;
+  baseValue?: string | null;
 }
 
-export function CodeEditor({ value, onChange, errorLine, readOnly = false }: Props) {
+export function CodeEditor({ value, onChange, errorLine, readOnly = false, baseValue = null }: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const html = useMemo(() => highlight(value), [value]);
+  const diffCounts = useMemo(() => {
+    if (!readOnly || baseValue === null || baseValue === value) return null;
+    const lines = computeLineDiff(baseValue, value);
+    return { lines, added: lines.filter((line) => line.kind === "add").length, removed: lines.filter((line) => line.kind === "del").length };
+  }, [readOnly, baseValue, value]);
   const lines = value.split("\n").length;
 
   const onScroll = () => {
@@ -122,11 +146,12 @@ export function CodeEditor({ value, onChange, errorLine, readOnly = false }: Pro
         <div className="h-24" />
       </div>
       <div className="relative min-w-0 flex-1">
+        {diffCounts && <div aria-label="Изменения кандидата ИИ" className="absolute right-3 top-2 z-10 rounded bg-slate-900/10 px-2 py-0.5 font-mono text-[10px] dark:bg-white/10"><span className="text-emerald-600">+{diffCounts.added}</span><span className="ml-2 text-red-600">-{diffCounts.removed}</span></div>}
         <pre
           ref={preRef}
           aria-hidden
           className={cn(shared, "pointer-events-none absolute inset-0 overflow-hidden px-3 py-2 text-slate-800 dark:text-slate-200")}
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={diffCounts ? { __html: diffCounts.lines.map((line) => `<span class="block ${line.kind === "add" ? "bg-emerald-100/80 dark:bg-emerald-900/30" : line.kind === "del" ? "bg-red-100/80 text-red-700 line-through dark:bg-red-900/30 dark:text-red-300" : ""}">${line.kind === "add" ? "+ " : line.kind === "del" ? "− " : "  "}${highlight(line.text).trimEnd()}</span>`).join("") + "\n" } : { __html: html }}
         />
         <textarea
           ref={taRef}

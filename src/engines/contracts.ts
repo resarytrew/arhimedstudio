@@ -30,6 +30,7 @@ export interface EngineRequestContextV1 {
 }
 
 export type EngineEventV1 =
+  | (EngineRequestContextV1 & { type: "log"; stream: "stdout" | "stderr"; text: string })
   | (EngineRequestContextV1 & { type: "state"; state: "idle" | "loading" | "ready" | "running" | "stopped" | "disposed" })
   | (EngineRequestContextV1 & { type: "diagnostic"; severity: "info" | "warning" | "error"; message: string; line?: number })
   | (EngineRequestContextV1 & { type: "progress"; value: number; detail?: string })

@@ -77,6 +77,18 @@ const isMob = (v: any): v is Mob => !!v && typeof v === "object" && "kind" in v 
 const isAnim = (v: any): v is Anim => !!v && v.__anim === true;
 const isProxy = (v: any): v is Proxy => !!v && v.__proxy === true;
 
+function deepEqual(a: any, b: any, seen = new WeakMap<object, object>()): boolean {
+  if (a === b) return true;
+  if (typeof a === "number" && typeof b === "number" && Number.isNaN(a) && Number.isNaN(b)) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const paired = seen.get(a);
+  if (paired) return paired === b;
+  seen.set(a, b);
+  const aKeys = Object.keys(a), bKeys = Object.keys(b);
+  return aKeys.length === bKeys.length && aKeys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && deepEqual(a[key], b[key], seen));
+}
+
 export const RATE: Record<string, (t: number) => number> = {
   linear: (t) => t,
   smooth: (t) => {
@@ -325,6 +337,19 @@ class Interpreter {
         i = j;
         continue;
       }
+      const whileM = l.text.match(/^while\s+(.+):$/);
+      if (whileM) {
+        const { sub, j } = collect(i + 1);
+        let iterations = 0;
+        while (truthy(this.evalStr(whileM[1], local))) {
+          if (++iterations > 10000) this.err("Цикл while превысил лимит в 10000 итераций");
+          this.line = l.no;
+          const returned = this.execBlock(sub, local);
+          if (returned) return returned;
+        }
+        i = j;
+        continue;
+      }
       const ifM = l.text.match(/^if\s+(.+):$/);
       if (ifM) {
         let { sub, j } = collect(i + 1);
@@ -361,14 +386,21 @@ class Interpreter {
         const m = l.text.match(/^def\s+(\w+)\s*\((.*)\)\s*(->.*)?:$/);
         const { sub, j } = collect(i + 1);
         if (m) {
-          const params = m[2].split(",").map((s) => s.trim()).filter(Boolean);
+          const params = splitTopLevel(m[2]).filter(Boolean).map((source) => {
+            const parts = splitTopLevel(source, "=");
+            const name = parts[0].split(":")[0].trim();
+            if (!/^[A-Za-z_]\w*$/.test(name)) this.err(`Некорректный параметр функции «${name}»`);
+            return { name, defaultValue: parts.length > 1 ? this.evalStr(parts.slice(1).join("="), local) : undefined, hasDefault: parts.length > 1 };
+          });
           const body = sub;
           this.vars.set(m[1], ((args: any[]) => {
             const scope = new Map<string, any>();
             params.forEach((p, k) => {
-              const name = p.split("=")[0].split(":")[0].trim();
-              scope.set(name, args[k]);
+              if (k < args.length) scope.set(p.name, args[k]);
+              else if (p.hasDefault) scope.set(p.name, p.defaultValue);
+              else this.err(`Не передан обязательный аргумент «${p.name}»`);
             });
+            if (args.length > params.length) this.err(`Функция «${m[1]}» получила лишние аргументы`);
             const returned = this.execBlock(body, scope);
             return returned?.value ?? null;
           }) as Fn);
@@ -514,6 +546,19 @@ class Interpreter {
         return !truthy(this.ev(n.v, scope));
       case "list":
         return n.items.map((x) => this.ev(x, scope));
+      case "comp": {
+        const iter = this.ev(n.iter, scope);
+        const values = isMob(iter) ? iter.children : iter;
+        if (!Array.isArray(values) && typeof values !== "string") this.err("Генератор ожидает список или range(...)");
+        const output: any[] = [];
+        for (const value of values as Iterable<any>) {
+          const child = new Map(scope ?? this.vars);
+          this.assignTargets(n.vars.join(","), value, child);
+          if (!n.cond || truthy(this.ev(n.cond, child))) output.push(this.ev(n.expr, child));
+          if (output.length > 10000) this.err("Генератор превысил лимит в 10000 элементов");
+        }
+        return output;
+      }
       case "dict": {
         const o: Record<string, any> = {};
         for (const [k, v] of n.entries) o[String(this.ev(k, scope))] = this.ev(v, scope);
@@ -553,8 +598,8 @@ class Interpreter {
       case ">": return a > b;
       case "<=": return a <= b;
       case ">=": return a >= b;
-      case "==": return JSON.stringify(a) === JSON.stringify(b) || a === b;
-      case "!=": return !(a === b);
+      case "==": return deepEqual(a, b);
+      case "!=": return !deepEqual(a, b);
       case "in": return Array.isArray(b) ? b.includes(a) : typeof b === "string" ? b.includes(a) : b && a in b;
     }
     if (typeof a === "string" && op === "+") return a + pyStr(b);

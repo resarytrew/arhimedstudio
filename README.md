@@ -19,3 +19,7 @@ ManimGX includes pinned scientific Python libraries for physics, electronics,
 engineering diagrams, biology, chemistry and mathematics. Select the ManimGX
 engine, then choose a lesson from **Готовые темы**. See
 [the library catalog and examples](docs/scientific-libraries.md).
+
+ManimGX rendering and MP4 export have explicit task states, cancellation,
+deadlines, Python diagnostics and a persistent last-successful-video download.
+See [the browser rendering lifecycle](docs/browser-render-lifecycle.md).

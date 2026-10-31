@@ -61,6 +61,12 @@ export function SettingsModal({ value, onSave, onClose }: Props) {
               <span className="mb-1 block text-[12px] font-medium text-slate-600 dark:text-slate-300">Адрес API</span>
               <input className={field} value={v.baseUrl} onChange={(e) => setV({ ...v, baseUrl: e.target.value })} />
             </label>
+            <label className="flex cursor-pointer items-start gap-2 text-[12px] text-slate-600 dark:text-slate-300">
+              <input type="checkbox" checked={v.rememberKey} onChange={(e) => setV({ ...v, rememberKey: e.target.checked })} className="mt-0.5" />
+              <span>Сохранить ключ на этом устройстве
+                <span className="mt-0.5 block text-[11px] text-amber-700 dark:text-amber-300">Ключ будет записан в localStorage браузера и доступен другим скриптам этого сайта. Включайте только на личном устройстве.</span>
+              </span>
+            </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-slate-600 dark:text-slate-300">Модель</span>
               <input className={field} value={v.model} onChange={(e) => setV({ ...v, model: e.target.value })} />
