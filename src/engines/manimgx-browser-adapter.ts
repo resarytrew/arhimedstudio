@@ -42,7 +42,7 @@ export interface ManimGXMp4ExportOptions {
 }
 
 const MAX_EXPORT_BYTES = 512 * 1024 * 1024;
-const MP4_EXPORT_TIMEOUT_MS = 5 * 60_000;
+const MP4_EXPORT_TIMEOUT_MS = 20 * 60_000;
 
 export interface ManimGXBrowserSessionV1 extends EngineSessionV1 {
   iframe: HTMLIFrameElement;
@@ -50,6 +50,7 @@ export interface ManimGXBrowserSessionV1 extends EngineSessionV1 {
   revision: number;
   ready: Promise<void>;
   supportsMp4Export: boolean;
+  renderedRevision: number;
   /** The newest requested load, including calls waiting for initial runtime authentication. */
   requestSerial: number;
   /** The source revision actually sent to the runtime; never use the creation-time context for events. */
@@ -136,6 +137,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
       revision: 0,
       ready,
       supportsMp4Export: false,
+      renderedRevision: 0,
       requestSerial: 0,
       exports: new Map(),
       disposed: false,
@@ -186,7 +188,10 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
         }
       } else if (session.activeContext?.requestId === message.requestId) {
         const current = session.activeContext;
-        if (message.kind === "rendered") onEvent({ ...current, type: "result", result: "rendered", detail: message.detail });
+        if (message.kind === "rendered") {
+          session.renderedRevision = message.revision;
+          onEvent({ ...current, type: "result", result: "rendered", detail: message.detail });
+        }
         else if (message.kind === "stopped") onEvent({ ...current, type: "state", state: "stopped" });
       }
     };
@@ -214,6 +219,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     session.exports.clear();
     session.activeContext = context;
     session.revision += 1;
+    session.renderedRevision = 0;
     session.port.postMessage({ protocol: PROTOCOL, sessionId: session.id, revision: session.revision, requestId: context.requestId, kind: "run", source: scene.source });
     return { ok: true, value: undefined };
   }
@@ -225,6 +231,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     if (session.disposed) return { ok: true, value: undefined };
     session.activeContext = context;
     session.revision += 1;
+    session.renderedRevision = 0;
     session.port.postMessage({ protocol: PROTOCOL, sessionId: session.id, revision: session.revision, requestId: context.requestId, kind: "cancel" });
     return { ok: true, value: undefined };
   }
@@ -238,6 +245,9 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
     await session.ready;
     if (!session.supportsMp4Export) {
       throw new Error("Подключённый ManimGX runtime ещё не поддерживает экспорт MP4. Обновите runtime до версии с протоколом export-mp4.");
+    }
+    if (session.renderedRevision !== session.revision) {
+      throw new Error("Дождитесь завершения отрисовки текущей сцены ManimGX перед экспортом.");
     }
     const requestId = context.requestId;
     if (session.exports.has(requestId)) throw new Error("Экспорт MP4 уже выполняется.");
