@@ -31,6 +31,22 @@ jobs:
       - name: Compile isolated runtime (TypeScript + Vite)
         working-directory: /tmp/arhimed-mp4-runtime
         run: npm run build
+      - name: Start patched runtime and test real H.264 MP4 output
+        env:
+          ARHIMED_TEST_MP4_ENCODER: '1'
+        run: |
+          npm ci
+          npx playwright install --with-deps chrome
+          (
+            cd /tmp/arhimed-mp4-runtime
+            npm run dev -- --port 4185 > /tmp/arhimed-mp4-vite.log 2>&1
+          ) &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4185/src/mp4-export.ts > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4185/src/mp4-export.ts > /dev/null
+          npx playwright test tests/manimgx-mp4-encode.spec.ts --project=chrome
   studio-build:
     runs-on: ubuntu-24.04
     steps:
