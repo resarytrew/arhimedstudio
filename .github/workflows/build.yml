@@ -22,7 +22,8 @@ jobs:
           path: dist
   test-manimgx-session:
     name: ManimGX runtime session regression (mocked cross-origin)
-    runs-on: ubuntu-latest
+    # Playwright 1.56 does not support ubuntu-26.04 FFmpeg installation.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
