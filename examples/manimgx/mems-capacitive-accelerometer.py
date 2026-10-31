@@ -1,97 +1,211 @@
-"""ManimGX 0.1.1: 3D demonstration of a capacitive MEMS accelerometer.
+"""A polished 3D teaching model of a differential capacitive MEMS accelerometer.
 
-Runs inside the isolated Arhimed Studio ManimGX browser runtime.
-No external assets, custom Python modules, network access or local server.
-The model is schematic: displacement and electrode geometry are not to scale.
+Compatible with the locked ManimGX 0.1.1 browser runtime in Arhimed Studio.
+It needs only manimgx and numpy, both already provided by the isolated runtime.
+
+Physics: x is the proof-mass displacement towards the right-hand fixed plate.
+The gaps are d_L=d+x and d_R=d-x. The displayed parallel-plate equations
+are an idealized model; fringing, damping, fabrication details and scale are
+deliberately omitted.
 """
 
 import manimgx as m
 import numpy as np
 
 
-def spring_points(x_start: float, x_end: float, y: float, z: float) -> np.ndarray:
-    """A zigzag spring with endpoints that follow the moving proof mass."""
-    segments = 18
-    xs = np.linspace(x_start, x_end, segments + 1)
-    points = []
-    for index, x in enumerate(xs):
-        offset = 0.0 if index in (0, segments) else (0.11 if index % 2 else -0.11)
-        points.append([x, y + offset, z])
-    return np.array(points)
+# Visual dimensions are model units rather than micrometres.
+MASS_HALF_WIDTH = 0.95
+PLATE_INNER_X = 1.84
+ANCHOR_INNER_X = 3.07
+SPRING_Y = 0.84
+SPRING_Z = 0.33
+TRAVEL = 0.30
+
+BG = "#091322"
+SUBSTRATE = "#26384D"
+MASS = "#45C5E8"
+MASS_EDGE = "#A7EBFF"
+LEFT_ELECTRODE = "#F5BD48"
+RIGHT_ELECTRODE = "#6AD8E8"
+SPRING = "#B9CBDD"
+
+
+def prism(width: float, height: float, depth: float, color: str, center: list[float]):
+    """Construct a shaded rectangular solid using supported ManimGX 0.1.1 API."""
+    block = m.Cube(side_length=1, fill_color=color, fill_opacity=1)
+    block.stretch_to_fit_width(width)
+    block.stretch_to_fit_height(height)
+    # There is no stretch_to_fit_depth in ManimGX 0.1.1.
+    block.rescale_to_fit(depth, 2, stretch=True)
+    block.move_to(center)
+    return block
+
+
+def compliant_beam(x0: float, x1: float, y: float) -> np.ndarray:
+    """Rounded, tapered serpentine spring with endpoints on physical attachments."""
+    progress = np.linspace(0.0, 1.0, 81)
+    xs = x0 + (x1 - x0) * progress
+    # Four lateral waves approximate a compliant suspension beam.
+    envelope = np.sin(np.pi * progress) ** 0.75
+    lateral = 0.105 * np.sin(8 * np.pi * progress) * envelope
+    return np.column_stack([xs, y + lateral, np.full_like(xs, SPRING_Z)])
 
 
 class MemsAccelerometer3D(m.ThreeDScene):
     def construct(self) -> None:
-        self.set_camera_orientation(
-            phi=66 * m.DEGREES,
-            theta=-54 * m.DEGREES,
-            zoom=0.92,
-        )
+        self.camera.background_color = BG
         self.camera.tone_mapping = "agx"
-        self.camera.ambient_occlusion = 0.3
+        self.camera.ambient_occlusion = 0.32
+        self.set_camera_orientation(
+            phi=63 * m.DEGREES,
+            theta=-53 * m.DEGREES,
+            zoom=1.16,
+        )
         self.add(
             m.SunLight(5 * m.UP + 4 * m.OUT),
-            m.AmbientLight(intensity=0.35),
+            m.AmbientLight(intensity=0.37),
         )
 
-        # The chip is a shallow 3D substrate; the moving mass is suspended above it.
-        substrate = m.Cube(side_length=1)
-        substrate.stretch_to_fit_width(7.2)
-        substrate.stretch_to_fit_height(4.0)
-        substrate.rescale_to_fit(0.17, 2, stretch=True)
-        substrate.set_color("#1e293b")
-        substrate.set_fill(opacity=0.85)
-        substrate.move_to([0, 0, -0.55])
+        # A lower, wide substrate provides a clear physical frame of reference.
+        substrate = prism(8.30, 4.55, 0.16, SUBSTRATE, [0, 0, -0.52])
+        left_trace = prism(7.00, 0.075, 0.055, "#415872", [0, -1.72, -0.405])
+        right_trace = prism(7.00, 0.075, 0.055, "#415872", [0, 1.72, -0.405])
 
-        frame = m.Cube(side_length=1, fill_color="#64748b", fill_opacity=0.95)
-        frame.stretch_to_fit_width(6.6)
-        frame.stretch_to_fit_height(0.32)
-        frame.rescale_to_fit(0.28, 2, stretch=True)
-        frame.move_to([0, -1.58, -0.05])
+        # The two electrodes stay fixed. Their face-to-mass gap is d+/-x.
+        plate_l = prism(0.22, 1.18, 0.57, LEFT_ELECTRODE, [-1.95, 0, 0.35])
+        plate_r = prism(0.22, 1.18, 0.57, RIGHT_ELECTRODE, [1.95, 0, 0.35])
 
-        def electrode(x: float, color: str) -> m.Cube:
-            plate = m.Cube(side_length=1, fill_color=color, fill_opacity=0.93)
-            plate.stretch_to_fit_width(0.20)
-            plate.stretch_to_fit_height(1.70)
-            plate.rescale_to_fit(0.48, 2, stretch=True)
-            plate.move_to([x, 0, 0.25])
-            return plate
-
-        electrode_left = electrode(-2.10, "#fbbf24")
-        electrode_right = electrode(2.10, "#fbbf24")
+        # Four anchoring pads at the spring ends. Springs pass above and
+        # below the electrode zone instead of intersecting the gold plates.
+        pads = m.VGroup(*[
+            prism(0.43, 0.35, 0.67, "#7289A2", [side * 3.28, height, -0.035])
+            for side in (-1, 1)
+            for height in (-SPRING_Y, SPRING_Y)
+        ])
 
         displacement = m.ValueTracker(0.0)
-        mass = m.Cube(side_length=1, fill_color="#38bdf8", fill_opacity=0.98)
-        mass.stretch_to_fit_width(1.50)
-        mass.stretch_to_fit_height(1.70)
-        mass.rescale_to_fit(0.65, 2, stretch=True)
-        mass.add_updater(lambda mob: mob.move_to([displacement.get_value(), 0, 0.25]))
+        mass = prism(1.90, 1.77, 0.55, MASS, [0, 0, 0.35])
+        mass.add_updater(
+            lambda block: block.move_to([displacement.get_value(), 0, 0.35])
+        )
 
-        def spring(left: bool, y: float) -> m.VMobject:
-            x_fixed = -3.25 if left else 3.25
-            x_moving = displacement.get_value() + (-0.75 if left else 0.75)
-            line = m.VMobject(stroke_color="#e2e8f0", stroke_width=3, shade_in_3d=True)
-            line.set_points_as_corners(spring_points(x_fixed, x_moving, y, 0.35))
+        def spring_line(side: int, y: float):
+            # Connection goes from the fixed pad to the proof-mass side face.
+            x_fixed = side * ANCHOR_INNER_X
+            x_mass = displacement.get_value() + side * MASS_HALF_WIDTH
+            line = m.VMobject(
+                stroke_color=SPRING,
+                stroke_width=3.7,
+                shade_in_3d=True,
+            )
+            line.set_points_as_corners(compliant_beam(x_fixed, x_mass, y))
             return line
 
         springs = [
-            m.always_redraw(lambda side=side, level=level: spring(side, level))
-            for side in (True, False)
-            for level in (-0.58, 0.58)
+            m.always_redraw(lambda side=side, y=y: spring_line(side, y))
+            for side in (-1, 1)
+            for y in (-SPRING_Y, SPRING_Y)
         ]
 
-        title = m.Text("MEMS: capacitive accelerometer", font_size=34).to_corner(m.UL)
-        formula = m.MathTex(r"C=\frac{\varepsilon A}{d}", font_size=46).to_corner(m.UR)
-        note = m.Text("Displacement changes the electrode gaps", font_size=24)
-        note.to_edge(m.DOWN, buff=0.30)
-        self.add_fixed_in_frame_mobjects(title, formula, note)
+        # Moving gap indicators make the differential principle visible.
+        # Each line terminates exactly on the inner electrode/mass faces.
+        def gap_indicator(side: int):
+            x = displacement.get_value()
+            if side < 0:
+                start, end = -PLATE_INNER_X, x - MASS_HALF_WIDTH
+                color = LEFT_ELECTRODE
+            else:
+                start, end = x + MASS_HALF_WIDTH, PLATE_INNER_X
+                color = RIGHT_ELECTRODE
+            return m.Line(
+                [start, 0, 0.74],
+                [end, 0, 0.74],
+                color=color,
+                stroke_width=4,
+                shade_in_3d=True,
+            )
 
-        self.play(m.FadeIn(substrate), m.FadeIn(frame), run_time=0.9)
-        self.play(m.FadeIn(electrode_left), m.FadeIn(electrode_right), run_time=0.7)
-        self.add(mass, *springs)
-        self.play(m.FadeIn(mass), run_time=0.6)
-        self.play(displacement.animate.set_value(0.35), run_time=1.5)
-        self.play(displacement.animate.set_value(-0.35), run_time=1.5)
-        self.play(displacement.animate.set_value(0.0), run_time=1.5)
-        self.move_camera(phi=55 * m.DEGREES, theta=-30 * m.DEGREES, run_time=1.5)
-        self.wait(0.8)
+        gap_lines = [
+            m.always_redraw(lambda side=side: gap_indicator(side))
+            for side in (-1, 1)
+        ]
+
+        # Fixed-in-frame labels never drift when the camera orbits.
+        eyebrow = m.Text(
+            "МИКРОЭЛЕКТРОМЕХАНИКА  /  3D",
+            font_size=18,
+            color="#8EABC5",
+        ).to_corner(m.UL, buff=0.50)
+        title = m.Text(
+            "Ёмкостный акселерометр",
+            font_size=32,
+            color="#F1F6FC",
+        ).next_to(eyebrow, m.DOWN, aligned_edge=m.LEFT, buff=0.17)
+        eq_l = m.MathTex(
+            r"C_L=\frac{\varepsilon A}{d+x}",
+            font_size=32,
+            color=LEFT_ELECTRODE,
+        ).to_corner(m.UR, buff=0.53)
+        eq_r = m.MathTex(
+            r"C_R=\frac{\varepsilon A}{d-x}",
+            font_size=32,
+            color=RIGHT_ELECTRODE,
+        ).next_to(eq_l, m.DOWN, aligned_edge=m.RIGHT, buff=0.14)
+        caption = m.Text(
+            "Инерция смещает массу и изменяет два зазора.",
+            font_size=22,
+            color="#E2EBF5",
+        ).to_corner(m.DL, buff=0.64)
+        disclaimer = m.Text(
+            "Схема. Масштаб условный.",
+            font_size=17,
+            color="#8EABC5",
+        ).to_corner(m.DR, buff=0.65)
+        self.add_fixed_in_frame_mobjects(
+            eyebrow, title, eq_l, eq_r, caption, disclaimer
+        )
+
+        # Establish the sensor, then show opposite changes of capacitance.
+        self.play(m.FadeIn(substrate), run_time=0.9)
+        self.play(
+            m.FadeIn(left_trace),
+            m.FadeIn(right_trace),
+            m.FadeIn(pads),
+            run_time=0.8,
+        )
+        self.play(
+            m.FadeIn(plate_l),
+            m.FadeIn(plate_r),
+            run_time=0.8,
+        )
+        self.add(mass, *springs, *gap_lines)
+        self.play(m.FadeIn(mass), run_time=0.7)
+        self.wait(0.4)
+
+        # Right acceleration response: right gap shrinks, left gap grows.
+        self.play(
+            displacement.animate.set_value(TRAVEL),
+            run_time=1.9,
+            rate_func=m.smooth,
+        )
+        self.wait(0.6)
+        self.play(
+            displacement.animate.set_value(-TRAVEL),
+            run_time=2.5,
+            rate_func=m.smooth,
+        )
+        self.wait(0.6)
+        self.play(
+            displacement.animate.set_value(0.0),
+            run_time=1.5,
+            rate_func=m.smooth,
+        )
+
+        # Small final orbit demonstrates that all components are truly 3D.
+        self.move_camera(
+            phi=55 * m.DEGREES,
+            theta=-35 * m.DEGREES,
+            zoom=1.21,
+            run_time=2.2,
+        )
+        self.wait(1.0)
