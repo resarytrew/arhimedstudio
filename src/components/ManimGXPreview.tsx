@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { Loader2 } from "lucide-react";
 import { ManimGXBrowserAdapterV1, type ManimGXBrowserSessionV1 } from "../engines/manimgx-browser-adapter";
 import type { Scene } from "../lib/store";
+import type { RenderedFrameInfoV1 } from "../engines/contracts";
 import { uid } from "../lib/store";
 import { isJobActive, RenderJobController, type RenderJob } from "../rendering/jobs";
 
@@ -10,6 +11,7 @@ interface Props {
   scene: Scene;
   onDiagnostic?: (message: string) => void;
   onMp4ExportCapabilityChange?: (available: boolean) => void;
+  onFrameInfo?: (info: RenderedFrameInfoV1 | null) => void;
   onJobChange?: (job: RenderJob) => void;
 }
 export interface ManimGXPreviewHandle {
@@ -34,6 +36,7 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
     void sessionRef.current?.dispose();
     sessionRef.current = undefined;
     callbacks.current.onMp4ExportCapabilityChange?.(false);
+    callbacks.current.onFrameInfo?.(null);
   };
 
   useImperativeHandle(ref, () => ({
@@ -53,6 +56,7 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
   useEffect(() => {
     callbacks.current.onDiagnostic?.("");
     callbacks.current.onMp4ExportCapabilityChange?.(false);
+    callbacks.current.onFrameInfo?.(null);
     if (!scene.source.trim()) {
       jobRef.current?.cancel("Добавьте код сцены, чтобы запустить превью.");
       return;
@@ -85,6 +89,7 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
               }
               if (event.type === "result" && event.result === "rendered") {
                 current.complete();
+                callbacks.current.onFrameInfo?.(event.frame ?? null);
                 callbacks.current.onMp4ExportCapabilityChange?.(sessionRef.current?.supportsMp4Export === true);
               }
             });
