@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const RUNTIME_URL = "https://arhimed-runtime.github.io/cross-origin-runtime.html";
 
-const fakePythonError = `<!doctype html><html><body><script>
+const fakePythonError = String.raw`<!doctype html><html><body><script>
   addEventListener("message", event => {
     if (event.data?.protocol !== "arhimed-runtime-v1" ||
         event.data?.kind !== "connect" || event.ports.length !== 1) return;
