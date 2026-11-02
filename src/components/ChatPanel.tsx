@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowUp, Check, ChevronLeft, ChevronRight, CircleCheck, 
 import type { Message } from "../lib/store";
 import { TEMPLATES } from "../lib/templates";
 import { SCIENCE_TEMPLATES } from "../lib/scientific-libraries";
+import { PRO_ANIMATION_TEMPLATES } from "../lib/pro-animations";
 import type { EngineId } from "../engines/contracts";
 import { cn } from "../utils/cn";
 import { Panel } from "./Panel";
@@ -48,10 +49,12 @@ function Typewriter({ text, onDone }: { text: string; onDone: () => void }) {
   return <span className={cn(n < text.length && "caret")}>{text.slice(0, n)}</span>;
 }
 
+const GX_TEMPLATES = [...SCIENCE_TEMPLATES, ...PRO_ANIMATION_TEMPLATES];
+
 export function ChatPanel(p: Props) {
-  const templates = p.engineId === "manimgx-browser" ? SCIENCE_TEMPLATES : TEMPLATES;
+  const templates = p.engineId === "manimgx-browser" ? GX_TEMPLATES : TEMPLATES;
   const promptPages = p.engineId === "manimgx-browser"
-    ? [SCIENCE_TEMPLATES.slice(0, 3).map(t => t.prompt), SCIENCE_TEMPLATES.slice(3).map(t => t.prompt)]
+    ? [GX_TEMPLATES.slice(0, 3).map(t => t.prompt), GX_TEMPLATES.slice(3, 6).map(t => t.prompt), GX_TEMPLATES.slice(6).map(t => t.prompt)]
     : PROMPT_PAGES;
   const [input, setInput] = useState("");
   const [page, setPage] = useState(0);
