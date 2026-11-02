@@ -5,7 +5,7 @@
  * This is display-only information, never an instruction to execute code.
  */
 export function sceneLineFromTraceback(detail: string): number | undefined {
-  const frames = detail.matchAll(/(?:^|\n)\s*File\s+["'][^"'\r\n]*\/scene\.py["'],\s*line\s+(\d+)/g);
+  const frames = detail.matchAll(/(?:^|\n)\s*File\s+["\']\/home\/pyodide\/films\/[^"\'\r\n/]+\/scene\.py["\'],\s*line\s+(\d+)/g);
   let line: number | undefined;
   for (const frame of frames) {
     const n = Number(frame[1]);
