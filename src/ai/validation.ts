@@ -48,7 +48,7 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
       const unknown = roots.find((root) => !GX_IMPORT_ROOTS.has(root));
       if (unknown) reject(`Импорт «${unknown}» не входит в закреплённый браузерный runtime.`, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
-    if (!/class\s+\w+\s*\(\s*(?:(?:m|manimgx)\.Scene|Scene)\s*\)\s*:/.test(source)) {
+    if (!/class\s+\w+\s*\(\s*(?:(?:m|manimgx)\.(?:Scene|ThreeDScene)|Scene|ThreeDScene)\s*\)\s*:/.test(source)) {
       reject("Нужен класс, наследующий Scene из manimgx.");
     }
   } else {
@@ -67,7 +67,6 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
     ? [
       [/\bnp\.math\b/, "np.math не существует; используйте разрешённые операции numpy или готовую константу."],
       [/\b(?:micropip|importlib|__import__|js|pyodide|fetch|XMLHttpRequest|WebSocket)\b/, "Закреплённый ManimGX runtime запрещает динамические пакеты, bridge Pyodide/JS и сетевые API."],
-      [/\b(?:ThreeDScene|set_camera_orientation|ThreeDAxes|Surface)\b/, "3D API ещё не сертифицирован реальным browser-прогоном; не генерируйте его, пока он не будет отдельно подтверждён."],
     ]
     : [
       [/\b(?:ValueTracker|always_redraw|add_updater|updater)\b/, "Canvas-профиль не поддерживает ValueTracker, always_redraw и updaters."],
@@ -80,46 +79,54 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
   for (let match = oversizedFont.exec(source); match; match = oversizedFont.exec(source)) {
     const size = Number(match[1]);
     const line = source.slice(0, match.index).split("\n").length;
-    if (size > 56) diagnostics.push({ line, message: `Размер текста ${size} превышает предел 56 и может выйти за кадр.` });
-    else if (size > 48) warnings.push({ line, message: `Размер текста ${size} больше рекомендуемого предела 48: проверьте композицию в превью.` });
+    if (engineId === "arhimed-canvas" && size > 56) {
+      diagnostics.push({ line, message: `Размер текста ${size} превышает предел Canvas 56 и может выйти за кадр.` });
+    } else if (size > 56) {
+      warnings.push({ line, message: `Крупный текст (${size}): проверьте, что он помещается в выбранном кадре ManimGX.` });
+    } else if (size > 48 && engineId === "arhimed-canvas") {
+      warnings.push({ line, message: `Размер текста ${size} больше рекомендуемого предела Canvas 48.` });
+    }
   }
 
   if (diagnostics.length) return { status: "rejected", engineId, diagnostics };
-  if (source.split("\n").length > 260) warnings.push({ message: "Сцена длиннее 260 строк: проверьте её по частям перед применением." });
-  const playCount = (source.match(/self\.play\s*\(/g) ?? []).length;
-  const explicitRunTimeCount = (source.match(/run_time\s*=/g) ?? []).length;
-  const implicitDurationLines = source
-    .split("\n")
-    .filter((line) => /self\.play\s*\(/.test(line) && !/run_time\s*=/.test(line));
-  for (const line of implicitDurationLines) {
-    diagnostics.push({
-      line: source.indexOf(line) >= 0 ? source.slice(0, source.indexOf(line)).split("\n").length : undefined,
-      message: "У каждого self.play должен быть явный run_time в той же строке: это нужно для ролика длительностью 7–10 секунд.",
-    });
-  }
-  const implicitWaitLines = source
-    .split("\n")
-    .filter((line) => /self\.wait\s*\(\s*\)/.test(line));
-  for (const line of implicitWaitLines) {
-    diagnostics.push({
-      line: source.indexOf(line) >= 0 ? source.slice(0, source.indexOf(line)).split("\n").length : undefined,
-      message: "У каждого self.wait должно быть явное число секунд: это нужно для ролика длительностью 7–10 секунд.",
-    });
-  }
-  if (/\b(?:run_time|self\.wait)\s*=\s*-|self\.wait\s*\(\s*-/.test(source)) {
-    diagnostics.push({ message: "Длительность run_time и self.wait должна быть положительным числом." });
-  }
-  if (explicitRunTimeCount < playCount && !implicitDurationLines.length) {
-    diagnostics.push({ message: "Для каждого self.play укажите ровно один явный run_time, чтобы проверить длительность ролика." });
-  }
-  if (!playCount) warnings.push({ message: "Не найден self.play(...): сцена может оказаться статичной." });
-  else if (playCount < 4 || playCount > 6) warnings.push({ message: `Найдено ${playCount} этапа анимации. Для короткого ролика предпочтительны 4–6 этапов.` });
 
-  const explicitRunTimes = [...source.matchAll(/run_time\s*=\s*(\d+(?:\.\d+)?)/g)].reduce((total, match) => total + Number(match[1]), 0);
-  const waits = [...source.matchAll(/self\.wait\s*\(\s*(\d+(?:\.\d+)?)?\s*\)/g)].reduce((total, match) => total + Number(match[1] ?? 1), 0);
-  const estimatedDuration = explicitRunTimes + waits + Math.max(0, playCount - explicitRunTimeCount);
-  if (playCount && (estimatedDuration < 7 || estimatedDuration > 10)) {
-    diagnostics.push({ message: `Оценочная длительность ${estimatedDuration.toFixed(1)} с выходит за диапазон 7–10 с. Скорректируйте run_time и self.wait.` });
+  const playCount = (source.match(/self\.play\s*\(/g) ?? []).length;
+  if (!playCount) warnings.push({ message: "Не найден self.play(...): сцена может оказаться статичной." });
+
+  // Short-form duration and fixed aspect ratio are Canvas conventions, not ManimGX API limits.
+  if (engineId === "arhimed-canvas") {
+    if (source.split("\n").length > 260) warnings.push({ message: "Сцена длиннее 260 строк: проверьте её по частям перед применением." });
+    const explicitRunTimeCount = (source.match(/run_time\s*=/g) ?? []).length;
+    const implicitDurationLines = source.split("\n").filter(line => /self\.play\s*\(/.test(line) && !/run_time\s*=/.test(line));
+    for (const line of implicitDurationLines) {
+      diagnostics.push({
+        line: source.indexOf(line) >= 0 ? source.slice(0, source.indexOf(line)).split("\n").length : undefined,
+        message: "У каждого self.play Canvas должен быть явный run_time в той же строке.",
+      });
+    }
+    const implicitWaitLines = source.split("\n").filter(line => /self\.wait\s*\(\s*\)/.test(line));
+    for (const line of implicitWaitLines) {
+      diagnostics.push({
+        line: source.indexOf(line) >= 0 ? source.slice(0, source.indexOf(line)).split("\n").length : undefined,
+        message: "У каждого self.wait Canvas должно быть явное число секунд.",
+      });
+    }
+    if (explicitRunTimeCount < playCount && !implicitDurationLines.length) {
+      diagnostics.push({ message: "Для каждого self.play Canvas укажите явный run_time." });
+    }
+    if (playCount && (playCount < 4 || playCount > 6)) {
+      warnings.push({ message: `Найдено ${playCount} этапов. Для короткого Canvas-ролика предпочтительны 4–6.` });
+    }
+    const explicitRunTimes = [...source.matchAll(/run_time\s*=\s*(\d+(?:\.\d+)?)/g)].reduce((total, match) => total + Number(match[1]), 0);
+    const waits = [...source.matchAll(/self\.wait\s*\(\s*(\d+(?:\.\d+)?)?\s*\)/g)].reduce((total, match) => total + Number(match[1] ?? 1), 0);
+    const estimatedDuration = explicitRunTimes + waits + Math.max(0, playCount - explicitRunTimeCount);
+    if (playCount && (estimatedDuration < 7 || estimatedDuration > 10)) {
+      diagnostics.push({ message: `Оценочная длительность ${estimatedDuration.toFixed(1)} с выходит за диапазон Canvas 7–10 с.` });
+    }
+  }
+
+  if (/\b(?:run_time|self\.wait)\s*=\s*-|self\.wait\s*\(\s*-/.test(source)) {
+    diagnostics.push({ message: "Длительность run_time и self.wait должна быть неотрицательной." });
   }
 
   const longText = /m\.(?:Text|Tex)\(\s*["']([^"']{43,})["']/g;
