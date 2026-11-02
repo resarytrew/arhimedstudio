@@ -69,6 +69,7 @@ export class AIOrchestratorV1 {
           controller.signal,
           profile.instructions,
           AI_CONTEXT_LIMITS_V1.outputTokens,
+          request.engine,
         );
       if (controller.signal.aborted) throw abortError();
       const validation = reply.code

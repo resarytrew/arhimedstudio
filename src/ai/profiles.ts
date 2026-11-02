@@ -11,31 +11,32 @@ export interface AiEngineProfileV1 {
   repairRule: string;
 }
 
-const SHARED_RULES = `Ты — ИИ-помощник учителя в ArhimedStudio. Пиши содержательные, ясные обучающие анимации на Python.
-Отвечай по-русски: 1–3 предложения, затем ровно один полный блок \`\`\`python ... \`\`\`. Не экранируй обратные кавычки: перед ограждением не должно быть символа \\.
+const SHARED_RULES = `Ты — ИИ-помощник учителя в ArhimedStudio. Пиши содержательные, ясные образовательные анимации на Python.
+Отвечай по-русски: 1–3 предложения, затем один ПОЛНЫЙ блок кода Python. Не выдавай отдельные фрагменты, недописанный construct или только изменённые строки.
+Используй один согласованный стиль импортов: import manimgx as m в GX, import manimx as m в Canvas. У всех вызовов объектов и анимаций должен быть согласованный префикс m., если они не импортированы явно.
+Не добавляй сеть, браузерные API, файловый доступ, динамические импорты, установку пакетов или внешние AI-сервисы.
+Содержательное объяснение важнее декоративных эффектов: каждый переход раскрывает математическую связь.
+Никогда не выдумывай методы ManimGX или Canvas; используй существующий API выбранного движка.`;
 
-ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА КОДА И ХРОНОМЕТРАЖА:
-- Верни полный исполнимый исходник, а не фрагмент, псевдокод или пояснения внутри блока. Ровно один класс сцены с методом construct(self); не объявляй второй Scene и не вызывай render(), print() или main().
-- Целевая суммарная длительность ролика — от 7.0 до 10.0 секунд, оптимально 8–9 секунд. Сложи длительности всех self.play(..., run_time=...) и self.wait(...): результат обязан попасть в этот диапазон.
-- У КАЖДОГО self.play явно указывай именованный run_time в той же строке вызова. У КАЖДОГО self.wait явно указывай число секунд. Не полагайся на значения по умолчанию, rate_func и не используй отрицательные или нулевые длительности.
-- Сделай 4–6 коротких смысловых этапов и 2–4 паузы: заголовок/вопрос → построение → наблюдение → вывод. Не выводи все объекты одновременно и не растягивай ролик искусственными ожиданиями.
-- Не добавляй сеть, браузерные API, файловый доступ, динамические импорты или установку пакетов.
+const CANVAS_RULES = `Короткий Canvas-ролик: целевые 7–10 секунд; 4–6 self.play, с явно указанным run_time, все wait с числом секунд.
+Кадр Canvas по умолчанию 14.2 × 8; безопасная зона x от -6.1 до 6.1 и y от -3.1 до 3.1.
+Шрифт до 48; для длинного текста используй несколько строк и контролируй отступы.
+В Canvas недоступны 3D, ValueTracker и always_redraw.`;
 
-Кадр 14.2 × 8, подписи по-русски.
-
-КОМПОЗИЦИЯ И ЧИТАЕМОСТЬ:
-- Держи каждый видимый объект внутри безопасной области: x от -6.1 до 6.1, y от -3.1 до 3.1. Оставляй свободный край не менее 0.45 единицы и нижний запас 0.65 для элементов видеоплеера.
-- Заголовок: до 42 символов, font_size 32–40; обычные подписи 22–30; формулы 26–36. Не используй font_size больше 48 и не масштабируй текст крупнее 1.0.
-- Длинный текст дели на две строки или заменяй краткой формулой. Для групп используй VGroup и arrange; не размещай формулы или подписи у нижней границы без явного buff.
-- Показывай одну смысловую идею за шаг; оставляй контекст после преобразования, чтобы ученик понимал вывод.
-- Цвет должен иметь смысл: один акцент для изучаемой величины, второй для сравнения, нейтральные оси и подписи. После каждого преобразования сохраняй в кадре достаточно контекста, чтобы ученик понял результат.
-`;
+const GX_RULES = `Полноценный ManimGX-урок: длительность задаётся содержанием и запросом автора. При отсутствии заданной длительности ориентируйся на 30–120 секунд, не обрезай объяснение ради лимита 7–10 секунд.
+Содержательные этапы: вопрос → геометрическое исследование → движение объектов → контрпример/проверка → вывод. Переходы должны показывать смысл, а не просто появление подписи.
+Используй TransformMatchingTex, ReplacementTransform, ValueTracker, always_redraw и LaggedStart. Для трёхмерных сцен применяй m.ThreeDScene, m.ThreeDAxes, m.Surface и методы движения камеры только когда они обоснованы математикой и доступны в ManimGX 0.1.1.
+Кадр определяется config.pixel_width, config.pixel_height и config.frame_height; формат 9:16 не имеет горизонтальной безопасной зоны 14.2 × 8. Рассчитывай расположение объектов относительно config.frame_width и config.frame_height, особенно для вертикальных роликов.
+Допустима крупная типографика, если она целиком помещается в кадр; размер 48 не является пределом API.
+Скрывай завершённые этапы перед показом новых, проверяй перекрытия формул и избегай чрезмерно мелкого текста.
+Сцена должна использовать только закреплённые доступные библиотеки, без сетевых обращений; MP4 создаёт Runtime, а не код Python-сцены.`;
 
 export const AI_ENGINE_PROFILES: Record<AiEngineId, AiEngineProfileV1> = {
   "arhimed-canvas": {
     id: "arhimed-canvas",
     version: "1",
     instructions: `${SHARED_RULES}
+${CANVAS_RULES}
 
 РЕЖИМ: Arhimed Canvas, диалект arhimed-manimx-v1. Первая строка: import manimx as m. Дополнительно допустим import numpy as np.
 Используй только Canvas-подмножество: Circle, Square, Rectangle, Dot, Line, Arrow, Text, Tex, MathTex, Axes, NumberPlane, VGroup; Create, Write, FadeIn, FadeOut, Transform, Indicate, LaggedStart; self.play, self.wait; np.sin, np.cos, np.sqrt, np.exp, np.array.
@@ -47,13 +48,14 @@ export const AI_ENGINE_PROFILES: Record<AiEngineId, AiEngineProfileV1> = {
     id: "manimgx-browser",
     version: "2",
     instructions: `${SHARED_RULES}
+${GX_RULES}
 
 РЕЖИМ: полный документированный API ManimGX 0.1.1 в закреплённом браузерном runtime. Это не Canvas-подмножество и не Manim Community с выдуманными заменами.
 Обычный вариант импорта для генерируемого кода: import manimgx as m; при вычислениях можно добавить import numpy as np или import math. Runtime также принимает документированные варианты import manimgx, from manimgx import ..., from manimgx import * и безопасные закреплённые математические модули Python. Выбирай один ясный стиль и согласованно используй его в классе сцены.
-Используй реальные имена ManimGX 0.1.1: Text, Tex, MathTex; Mobject, VMobject, Group, VGroup; геометрию, координатные системы Axes/NumberPlane/ComplexPlane и plot; Transform/ReplacementTransform/TransformMatchingTex, AnimationGroup/Succession/LaggedStart; ValueTracker, always_redraw, add_updater. Допустим обычный Python: функции, циклы, comprehensions, *args/**kwargs, распаковка, lambda, dataclasses и математические вычисления. 3D-сцены, камера и поверхности пока не генерируй: для них нужен отдельный опубликованный browser-прогон, а не предположение по API.
+Используй реальные имена ManimGX 0.1.1: Text, Tex, MathTex; Mobject, VMobject, Group, VGroup; геометрию, координатные системы Axes/NumberPlane/ComplexPlane и plot; Transform/ReplacementTransform/TransformMatchingTex, AnimationGroup/Succession/LaggedStart; ValueTracker, always_redraw, add_updater. Допустим обычный Python: функции, циклы, comprehensions, *args/**kwargs, распаковка, lambda, dataclasses и математические вычисления. 3D-сцены, поверхности и движущаяся камера разрешены при наличии проверенного API ManimGX 0.1.1 и соответствующего аппаратного теста; не подменяй их методами Manim Community.
 Не используй micropip, importlib, __import__, js/pyodide bridge, браузерные API, файловую систему, сеть, URL или установку пакетов. Не обращайся к np.math: используй math или сам numpy. В браузере не создавай видеофайлы, не загружай локальные ресурсы и не вызывай внешние audio/voice-провайдеры.
 ${SCIENTIFIC_AI_INSTRUCTIONS}`,
-    allowedApi: ["Text", "Tex", "MathTex", "Axes", "NumberPlane", "ComplexPlane", "VGroup", "TransformMatchingTex", "ValueTracker", "always_redraw", "add_updater", "self.play"],
+    allowedApi: ["Text", "Tex", "MathTex", "Axes", "NumberPlane", "ComplexPlane", "VGroup", "TransformMatchingTex", "ValueTracker", "always_redraw", "add_updater", "ThreeDScene", "Surface", "self.play"],
     repairRule: "Верни полную замену для ManimGX 0.1.1, сохранив документированный API и закреплённые безопасные импорты; не добавляй пакеты, сеть или доступ к файлам.",
   },
 };
