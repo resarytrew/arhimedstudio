@@ -317,7 +317,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   if (engine === "manimgx-browser" && /(тейлор|taylor).*(син|sin)|(син|sin).*(тейлор|taylor)/.test(p)) {
     return {
       text: "Построил sin(x) и его приближение полиномом Тейлора пятой степени. В коде используются только закреплённые импорты ManimGX и numpy.",
-      code: fitShortVideo(gxTaylorSineCode()),
+      code: gxTaylorSineCode(),
       title: isFirst ? "Ряд Тейлора" : undefined,
     };
   }
@@ -361,7 +361,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
     const matches = SCIENCE_TEMPLATES.map(t => ({ t, score: t.prompt.toLowerCase() === p ? 100 : t.keywords.filter(keyword => p.includes(keyword)).length }))
       .filter(item => item.score > 0).sort((a, b) => b.score - a.score);
     const match = matches[0]?.t;
-    if (match) return { text: match.reply, code: fitShortVideo(match.code), title: isFirst ? match.title : undefined };
+    if (match) return { text: match.reply, code: match.code, title: isFirst ? match.title : undefined };
   }
   let best: { t: (typeof TEMPLATES)[number]; score: number } | null = null;
   for (const t of TEMPLATES) {
@@ -379,7 +379,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
   return {
     text:
       `Подготовил стартовую сцену-заготовку по теме «${nice}»: заголовок, акцентная линия и набор фигур, которые можно превратить в иллюстрацию. Уточните, что именно показать (например, формулу, график или шаги решения), — и я дострою анимацию. В офлайн-режиме я лучше всего знаю темы: кинематика, графы, линейная алгебра, ряды, геометрия, тригонометрия и производные. Подключите языковую модель в настройках, чтобы генерировать любые сцены.`,
-    code: fitShortVideo(engine === "manimgx-browser" ? gxStarterCode(nice) : canvasStarterCode(nice)),
+    code: engine === "manimgx-browser" ? gxStarterCode(nice) : fitShortVideo(canvasStarterCode(nice)),
     title: isFirst ? nice.slice(0, 32) : undefined,
   };
 }
@@ -392,6 +392,7 @@ export async function llmAssistant(
   signal: AbortSignal | undefined,
   systemPrompt: string,
   maxOutputTokens: number,
+  engine: AiEngineId = "arhimed-canvas",
 ): Promise<AssistantReply> {
   if (settings.provider === "offline") throw new Error("Выбран офлайн-ассистент.");
   if (!settings.apiKey) throw new Error("Введите API-ключ для выбранного провайдера.");
@@ -441,5 +442,5 @@ export async function llmAssistant(
   const reply = parseAssistantContent(content);
   // Hosted models occasionally miss the timing budget by a few tenths of a second.
   // Explicit durations can be safely scaled before the candidate reaches validation.
-  return reply.code ? { ...reply, code: fitShortVideo(reply.code) } : reply;
+  return reply.code && engine === "arhimed-canvas" ? { ...reply, code: fitShortVideo(reply.code) } : reply;
 }
