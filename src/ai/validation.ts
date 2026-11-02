@@ -61,7 +61,7 @@ export function validateAiCandidate(source: string, engineId: AiEngineId): AiCan
     }
     if (!/class\s+\w+\s*\(\s*m\.Scene\s*\)\s*:/.test(source)) reject("Нужен класс, наследующий m.Scene.");
   }
-  if (!/def\s+construct\s*\(\s*self\s*\)\s*:/.test(source)) reject("Нужен метод construct(self).");
+  if (!(engineId === "manimgx-browser" ? /def\s+construct\s*\(\s*self\s*\)\s*(?:->\s*[^:\n]+)?\s*:/.test(source) : /def\s+construct\s*\(\s*self\s*\)\s*:/.test(source))) reject("Нужен метод construct(self).");
 
   const forbidden: readonly [RegExp, string][] = engineId === "manimgx-browser"
     ? [
