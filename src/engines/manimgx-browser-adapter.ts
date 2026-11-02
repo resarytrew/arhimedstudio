@@ -4,6 +4,7 @@ import {
   type EngineEventV1,
   type EngineMetadataV1,
   type EngineRequestContextV1,
+  type RenderedFrameInfoV1,
   type EngineResult,
   type EngineSceneV1,
   type EngineSessionV1,
@@ -26,8 +27,22 @@ interface RuntimeMessage {
   /** Only present on `ready` and is deliberately capability-based for older runtimes. */
   capabilities?: { mp4Export?: boolean };
   /** A transferable MP4 file sent only in response to an authenticated export request. */
-  data?: ArrayBuffer | Uint8Array | Blob;
+  data?: ArrayBuffer | Uint8Array | Blob | { canvasWidth?: number; canvasHeight?: number; duration?: number | null };
   progress?: number;
+}
+
+/** Authenticated runtime metadata describes the currently drawn WebGPU canvas, not the encoded MP4. */
+export function renderedFrameInfo(data: unknown): RenderedFrameInfoV1 | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const record = data as Record<string, unknown>;
+  const width = record.canvasWidth;
+  const height = record.canvasHeight;
+  const duration = record.duration;
+  if (typeof width !== "number" || typeof height !== "number" || typeof duration !== "number"
+    || !Number.isSafeInteger(width) || !Number.isSafeInteger(height)
+    || width < 2 || height < 2 || width > 16_384 || height > 16_384
+    || !Number.isFinite(duration) || duration <= 0 || duration > 86_400) return undefined;
+  return { width, height, duration };
 }
 
 interface PendingExport {
@@ -215,7 +230,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
         }
         if (message.kind === "rendered") {
           session.renderedRevision = message.revision;
-          onEvent({ ...current, type: "result", result: "rendered", detail: message.detail });
+          onEvent({ ...current, type: "result", result: "rendered", detail: message.detail, frame: renderedFrameInfo(message.data) });
         }
         else if (message.kind === "stopped") onEvent({ ...current, type: "state", state: "stopped" });
       }
