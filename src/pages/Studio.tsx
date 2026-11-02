@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, Maximize2, Minimize2, Wand2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, ShieldCheck, Maximize2, Minimize2, Wand2, X } from "lucide-react";
 import { ChatPanel } from "../components/ChatPanel";
 import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
@@ -14,6 +14,7 @@ import type { Timeline } from "../engine/interpreter";
 import { loadEngineFonts } from "../engine/fonts";
 import type { LLMSettings } from "../lib/assistant";
 import { WELCOME_CODE } from "../lib/templates";
+import { inspectManimGXSource } from "../lib/manimgx-source-preflight";
 import { aiOrchestrator } from "../ai/orchestrator";
 import type { AiCandidateValidationV1 } from "../ai/validation";
 import type { RenderedFrameInfoV1 } from "../engines/contracts";
@@ -29,6 +30,8 @@ import {
   LLM_KEY,
   newProject,
   PROJECTS_KEY,
+  PROJECT_PERSISTENCE_EVENT,
+  type ProjectPersistenceStatus,
   setActiveSceneEngine,
   setActiveScene,
   uid,
@@ -58,7 +61,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [error, setError] = useState<{ msg: string; line: number } | null>(null);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [runtimeError, setRuntimeError] = useState<{ msg: string; line?: number } | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [booting, setBooting] = useState(true);
   const lastGood = useRef<string>("");
@@ -84,13 +87,24 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [lastVideo, setLastVideo] = useState<VideoArtifact | null>(null);
   const [renderedFrame, setRenderedFrame] = useState<RenderedFrameInfoV1 | null>(null);
   const [videoStorageError, setVideoStorageError] = useState<string | null>(null);
+  const [projectSaveFailed, setProjectSaveFailed] = useState(false);
   const videoJobRef = useRef<RenderJobController | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
+  const [preflightOpen, setPreflightOpen] = useState(false);
   const playerRef = useRef<PlayerHandle>(null);
   const gxPreviewRef = useRef<ManimGXPreviewHandle>(null);
   const previewSurfaceRef = useRef<HTMLDivElement>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onStatus = (event: Event) => {
+      const detail = (event as CustomEvent<ProjectPersistenceStatus>).detail;
+      if (detail && typeof detail.saved === "boolean") setProjectSaveFailed(!detail.saved);
+    };
+    window.addEventListener(PROJECT_PERSISTENCE_EVENT, onStatus);
+    return () => window.removeEventListener(PROJECT_PERSISTENCE_EVENT, onStatus);
+  }, []);
 
   useEffect(() => {
     if (!projects.length) {
@@ -116,6 +130,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     ? scene.revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
     : undefined;
   const displayedCode = reviewCandidate?.source ?? code;
+  const preflightIssues = useMemo(() => inspectManimGXSource(displayedCode), [displayedCode]);
   const selection = `${active.id}:${scene.id}`;
   const selectionRef = useRef(selection); selectionRef.current = selection;
 
@@ -395,6 +410,16 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     window.setTimeout(() => URL.revokeObjectURL(href), 1000);
   };
 
+  const downloadProjectBackup = () => {
+    const blob = new Blob([JSON.stringify(active, null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = "arhimed-project-backup.json";
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+  };
+
   // splitters
   const dragH = (e: RPointerEvent) => {
     e.preventDefault();
@@ -503,7 +528,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     >
       <div className="flex h-full min-h-0 flex-col">
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative min-h-0 flex-1 bg-black">
-        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onFrameInfo={setRenderedFrame} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
+        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={(message, line) => setRuntimeError(message ? { msg: message, line } : null)} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onFrameInfo={setRenderedFrame} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
         {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
@@ -536,10 +561,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="font-medium">Ошибка ManimGX</div>
-              <div className="truncate opacity-80">{runtimeError}</div>
+              <div className="truncate opacity-80">{runtimeError.msg}</div>
             </div>
             <button
-              onClick={() => repairWithAi(runtimeError)}
+              onClick={() => repairWithAi(runtimeError.msg)}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
             >
               <Wand2 size={13} /> Исправить с ИИ
@@ -618,6 +643,11 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
               </>
             )}
           </span>}
+          {scene.engineId === "manimgx-browser" && (
+            <IconBtn onClick={() => setPreflightOpen(value => !value)} title="Проверить Python-сцену">
+              <ShieldCheck size={14} />
+            </IconBtn>
+          )}
           <IconBtn onClick={copyCode} title="Копировать код">
             {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
           </IconBtn>
@@ -627,8 +657,28 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         </>
       }
     >
-          {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
-          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
+          <div className="flex h-full min-h-0 flex-col">
+            {reviewCandidate && <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
+            {scene.engineId === "manimgx-browser" && preflightOpen && (
+              <section data-testid="manimgx-preflight" aria-label="Предварительная проверка Python" className="max-h-44 shrink-0 overflow-y-auto border-b border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-800">
+                <div className="mb-1 font-semibold">Проверка исходного кода ManimGX</div>
+                {preflightIssues.length === 0
+                  ? <p className="text-emerald-700 dark:text-emerald-300">Типичных ошибок не найдено.</p>
+                  : <ul className="space-y-1.5">
+                      {preflightIssues.map(issue => (
+                        <li key={issue.code + ":" + issue.line} className={issue.severity === "error" ? "text-red-700 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}>
+                          <span className="font-semibold">Строка {issue.line}:</span> {issue.message}
+                        </li>
+                      ))}
+                    </ul>
+                }
+                <p className="mt-2 text-slate-500 dark:text-slate-400">Это предварительный анализ текста, а не выполнение Python. Наложения объектов и фактическую отрисовку он не проверяет.</p>
+              </section>
+            )}
+            <div className="min-h-0 flex-1">
+              <CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : scene.engineId === "manimgx-browser" ? runtimeError?.line ?? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} />
+            </div>
+          </div>
     </Panel>
   );
 
@@ -636,7 +686,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const allHidden = !show("chat") && !rightVisible;
 
   return (
-    <div className="flex h-full gap-2 bg-gradient-to-br from-sky-100 via-blue-100 to-indigo-100 p-2 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+    <div className="relative flex h-full gap-2 bg-gradient-to-br from-sky-100 via-blue-100 to-indigo-100 p-2 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       <Sidebar
         projects={projects}
         activeId={active?.id ?? ""}
@@ -708,6 +758,22 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             showToast(v.provider !== "offline" && v.apiKey ? `Подключена модель ${v.model}` : "Включён офлайн-ассистент");
           }}
         />
+      )}
+
+      {projectSaveFailed && (
+        <div role="alert" aria-label="Не удалось сохранить проект" className="fixed bottom-16 right-5 z-50 max-w-xl rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 shadow-xl dark:border-amber-500/50 dark:bg-slate-900 dark:text-amber-100">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+            <div className="space-y-2">
+              <p className="font-semibold">Изменения проекта не сохранились в браузере.</p>
+              <p>Возможно, хранилище заполнено или заблокировано. До перезагрузки сохраните открытый Python-код и резервную копию проекта.</p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={downloadPy} className="rounded-md bg-amber-950 px-3 py-1.5 font-medium text-white dark:bg-amber-400 dark:text-slate-950">Скачать Python</button>
+                <button onClick={downloadProjectBackup} className="rounded-md border border-amber-500/60 px-3 py-1.5 font-medium">Резервная копия JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (
