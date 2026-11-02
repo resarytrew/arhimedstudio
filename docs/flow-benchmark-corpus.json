@@ -1,0 +1,131 @@
+{
+  "schema": "arhimed.flow.benchmark.corpus.v0.1",
+  "registered_on": "2026-11-02",
+  "status": "historical pilot recorded; independent holdout not yet sealed",
+  "flow_api_frozen": false,
+  "never_publish_user_sources_without_permission": true,
+  "historical_pilot": [
+    {
+      "filename": "MathAffinity_РЕЖИССЁРСКАЯ_ВЕРСИЯ_ManimGX.py",
+      "domain": "inverse_functions",
+      "sha256": "e34dafe4bc6bc07997a3d63b6988ac968bff02754931af42c70410d9c512d498",
+      "historical_sloc": 181,
+      "set": "historical_dev",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "Интеграл_простыми_словами_ManimGX_исправлено.py",
+      "domain": "definite_integral",
+      "sha256": "cb7b3fa9cc6ed278a9b45ba3476c7e452da151608fcd47d47e78551df03025a2",
+      "historical_sloc": 185,
+      "set": "historical_dev",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "Площадь_круга_ManimGX_без_наложений_подробно.py",
+      "domain": "circle_area_proof",
+      "sha256": "44897b1fc0f447b0e7894d7b4f8d7ea55ed554569f4c19b36db10ff70563fdfd",
+      "historical_sloc": 277,
+      "set": "historical_dev",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "ManimGX_Seno_Cosseno_9x16.py",
+      "domain": "trigonometric_graph",
+      "sha256": "3916457eca100b97bea392bb447bfc458f2b86dc2a73890e154069a489a11c51",
+      "historical_sloc": 317,
+      "set": "historical_audit_only",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "Горизонтальная_прямая_чётная_степень_ManimGX.py",
+      "domain": "functional_geometry",
+      "sha256": "8d1dcb0357c725c0a59599fd38e1231ac3bb9bf8e2ea65e7ab64fe114d3fb541",
+      "historical_sloc": 164,
+      "set": "historical_audit_only",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "Неравенство_модули_ManimGX.py",
+      "domain": "absolute_inequality",
+      "sha256": "0726403c6ddc158a8774569a67b327757f3b4b851bf3efcef72ece91416dc104",
+      "historical_sloc": 209,
+      "set": "historical_audit_only",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "ConnectFour_ManimGX_ArhimedStudio.py",
+      "domain": "out_of_domain_game",
+      "sha256": "b89a6750b16421ff1b5bc4f17ce0696cb42bb4040e776ba22eb85e7bb903de63",
+      "historical_sloc": 217,
+      "set": "historical_audit_only",
+      "is_blind_holdout": false
+    },
+    {
+      "filename": "Площадь_круга_кольца_ManimGX_9x16.py",
+      "domain": "circle_ring_visual",
+      "sha256": "d71d3254917cc22f67c285eadab2692afda9756262c1cb99c037076436abbd29",
+      "historical_sloc": 137,
+      "set": "historical_audit_only",
+      "is_blind_holdout": false
+    }
+  ],
+  "prospective_holdout_slots": [
+    {
+      "id": "H01",
+      "domain": "linear_systems",
+      "brief": "Graphical and algebraic views of a 2×2 linear system",
+      "independent_author_required": true,
+      "manimce_source_sha256": null,
+      "target_video_sha256": null,
+      "storyboard_sha256": null,
+      "source_sealed_at": null,
+      "eligible_for_blind_claim": false
+    },
+    {
+      "id": "H02",
+      "domain": "symbolic_inequality",
+      "brief": "Parameterised inequality and its boundary cases",
+      "independent_author_required": true,
+      "manimce_source_sha256": null,
+      "target_video_sha256": null,
+      "storyboard_sha256": null,
+      "source_sealed_at": null,
+      "eligible_for_blind_claim": false
+    },
+    {
+      "id": "H03",
+      "domain": "derivative_graph",
+      "brief": "Tangent, secant and derivative interpretation",
+      "independent_author_required": true,
+      "manimce_source_sha256": null,
+      "target_video_sha256": null,
+      "storyboard_sha256": null,
+      "source_sealed_at": null,
+      "eligible_for_blind_claim": false
+    },
+    {
+      "id": "H04",
+      "domain": "data_diagram",
+      "brief": "Data change with object identity preserved across chart states",
+      "independent_author_required": true,
+      "manimce_source_sha256": null,
+      "target_video_sha256": null,
+      "storyboard_sha256": null,
+      "source_sealed_at": null,
+      "eligible_for_blind_claim": false
+    },
+    {
+      "id": "H05",
+      "domain": "geometry_proof",
+      "brief": "Geometric area conservation; no ring-unrolling template",
+      "independent_author_required": true,
+      "manimce_source_sha256": null,
+      "target_video_sha256": null,
+      "storyboard_sha256": null,
+      "source_sealed_at": null,
+      "eligible_for_blind_claim": false
+    }
+  ],
+  "note": "All eight historical sources were inspected before the protocol. They are not valid blind hold-outs. Future assignments need independent source/video/storyboard hashes before API freeze."
+}
