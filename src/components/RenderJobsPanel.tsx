@@ -1,6 +1,7 @@
 import { isJobActive, type RenderJob } from "../rendering/jobs";
 import type { VideoArtifact } from "../rendering/video-artifacts";
 import type { RenderedFrameInfoV1 } from "../engines/contracts";
+import type { Mp4ExportPreflightIssue } from "../lib/manimgx-export-preflight";
 
 const labels = { queued: "В очереди", running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Отменено" };
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   video?: RenderJob | null;
   artifact?: VideoArtifact | null;
   renderedFrame?: RenderedFrameInfoV1 | null;
+  mp4Preflight?: Mp4ExportPreflightIssue[];
   storageError?: string | null;
   onCancelPreview: () => void;
   onRetry: () => void;
@@ -32,6 +34,15 @@ export function RenderJobsPanel(p: Props) {
       <div data-testid="rendered-frame-info" className="text-slate-300">
         Предпросмотр WebGPU: {p.renderedFrame.width}×{p.renderedFrame.height} пикселей · {p.renderedFrame.duration.toFixed(1)} с.
         <span className="ml-1 text-slate-500">Размер готового MP4 зависит от текущего canvas и проверяется отдельно.</span>
+      </div>
+    )}
+    {Boolean(p.mp4Preflight?.length) && (
+      <div data-testid="mp4-export-preflight" className="space-y-1">
+        {p.mp4Preflight?.map(issue => (
+          <p key={issue.code} className={issue.blocking ? "text-red-300" : "text-amber-200"}>
+            {issue.blocking ? "Экспорт MP4 недоступен: " : "Примечание MP4: "}{issue.message}
+          </p>
+        ))}
       </div>
     )}
     {p.storageError && <p className="text-amber-200">{p.storageError}</p>}
