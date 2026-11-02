@@ -1,11 +1,13 @@
 import { isJobActive, type RenderJob } from "../rendering/jobs";
 import type { VideoArtifact } from "../rendering/video-artifacts";
+import type { RenderedFrameInfoV1 } from "../engines/contracts";
 
 const labels = { queued: "В очереди", running: "Выполняется", completed: "Готово", failed: "Ошибка", cancelled: "Отменено" };
 interface Props {
   preview?: RenderJob | null;
   video?: RenderJob | null;
   artifact?: VideoArtifact | null;
+  renderedFrame?: RenderedFrameInfoV1 | null;
   storageError?: string | null;
   onCancelPreview: () => void;
   onRetry: () => void;
@@ -26,6 +28,12 @@ export function RenderJobsPanel(p: Props) {
       {job.status === "running" && job.kind === "preview" && job.stage && <p className="text-slate-400">{job.stage}</p>}
       {(job.stdout || job.stderr) && <details className="text-slate-400"><summary className="cursor-pointer">Журнал Python</summary><pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words">{job.stdout && `stdout:\n${job.stdout}`}{job.stderr && `\nstderr:\n${job.stderr}`}</pre></details>}
     </div>)}
+    {p.renderedFrame && (
+      <div data-testid="rendered-frame-info" className="text-slate-300">
+        Предпросмотр WebGPU: {p.renderedFrame.width}×{p.renderedFrame.height} пикселей · {p.renderedFrame.duration.toFixed(1)} с.
+        <span className="ml-1 text-slate-500">Размер готового MP4 зависит от текущего canvas и проверяется отдельно.</span>
+      </div>
+    )}
     {p.storageError && <p className="text-amber-200">{p.storageError}</p>}
     {p.artifact && <div className="flex flex-wrap items-center gap-x-3 text-slate-400">
       <button onClick={p.onDownloadLast} className="py-1 text-cyan-200 hover:underline">Скачать последнее успешное видео</button>
