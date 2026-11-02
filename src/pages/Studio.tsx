@@ -28,6 +28,8 @@ import {
   LLM_KEY,
   newProject,
   PROJECTS_KEY,
+  PROJECT_PERSISTENCE_EVENT,
+  type ProjectPersistenceStatus,
   setActiveSceneEngine,
   setActiveScene,
   uid,
@@ -82,6 +84,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [videoJob, setVideoJob] = useState<RenderJob | null>(null);
   const [lastVideo, setLastVideo] = useState<VideoArtifact | null>(null);
   const [videoStorageError, setVideoStorageError] = useState<string | null>(null);
+  const [projectSaveFailed, setProjectSaveFailed] = useState(false);
   const videoJobRef = useRef<RenderJobController | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
@@ -89,6 +92,15 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const gxPreviewRef = useRef<ManimGXPreviewHandle>(null);
   const previewSurfaceRef = useRef<HTMLDivElement>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onStatus = (event: Event) => {
+      const detail = (event as CustomEvent<ProjectPersistenceStatus>).detail;
+      if (detail && typeof detail.saved === "boolean") setProjectSaveFailed(!detail.saved);
+    };
+    window.addEventListener(PROJECT_PERSISTENCE_EVENT, onStatus);
+    return () => window.removeEventListener(PROJECT_PERSISTENCE_EVENT, onStatus);
+  }, []);
 
   useEffect(() => {
     if (!projects.length) {
@@ -393,6 +405,16 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     window.setTimeout(() => URL.revokeObjectURL(href), 1000);
   };
 
+  const downloadProjectBackup = () => {
+    const blob = new Blob([JSON.stringify(active, null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = "arhimed-project-backup.json";
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+  };
+
   // splitters
   const dragH = (e: RPointerEvent) => {
     e.preventDefault();
@@ -634,7 +656,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const allHidden = !show("chat") && !rightVisible;
 
   return (
-    <div className="flex h-full gap-2 bg-gradient-to-br from-sky-100 via-blue-100 to-indigo-100 p-2 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+    <div className="relative flex h-full gap-2 bg-gradient-to-br from-sky-100 via-blue-100 to-indigo-100 p-2 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
       <Sidebar
         projects={projects}
         activeId={active?.id ?? ""}
@@ -706,6 +728,22 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             showToast(v.provider !== "offline" && v.apiKey ? `Подключена модель ${v.model}` : "Включён офлайн-ассистент");
           }}
         />
+      )}
+
+      {projectSaveFailed && (
+        <div role="alert" aria-label="Не удалось сохранить проект" className="fixed bottom-16 right-5 z-50 max-w-xl rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 shadow-xl dark:border-amber-500/50 dark:bg-slate-900 dark:text-amber-100">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+            <div className="space-y-2">
+              <p className="font-semibold">Изменения проекта не сохранились в браузере.</p>
+              <p>Возможно, хранилище заполнено или заблокировано. До перезагрузки сохраните открытый Python-код и резервную копию проекта.</p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={downloadPy} className="rounded-md bg-amber-950 px-3 py-1.5 font-medium text-white dark:bg-amber-400 dark:text-slate-950">Скачать Python</button>
+                <button onClick={downloadProjectBackup} className="rounded-md border border-amber-500/60 px-3 py-1.5 font-medium">Резервная копия JSON</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (

@@ -177,6 +177,27 @@ function load<T>(key: string, fallback: T): T {
   }
 }
 
+export const PROJECT_PERSISTENCE_EVENT = "arhimed:project-persistence";
+
+export interface ProjectPersistenceStatus {
+  saved: boolean;
+}
+
+/** Write and report project-storage failures; never silently discard an unsaved revision. */
+export function savePersistedValue(key: string, value: unknown): boolean {
+  let saved = false;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    saved = true;
+  } catch {
+    // QuotaExceededError, denied storage and serialization failure all mean unsaved changes.
+  }
+  if (key === PROJECTS_KEY) {
+    window.dispatchEvent(new CustomEvent<ProjectPersistenceStatus>(PROJECT_PERSISTENCE_EVENT, { detail: { saved } }));
+  }
+  return saved;
+}
+
 export function usePersistent<T>(key: string, initial: () => T) {
   const [value, setValue] = useState<T>(() => load(key, initial()));
   const valueRef = useRef(value);
@@ -185,7 +206,8 @@ export function usePersistent<T>(key: string, initial: () => T) {
   valueRef.current = value;
   keyRef.current = key;
   const saveLatest = () => {
-    try { localStorage.setItem(keyRef.current, JSON.stringify(valueRef.current)); } catch { /* storage can be unavailable or full */ }
+    // A failed write must not look successful: the author's changes may exist only in memory.
+    savePersistedValue(keyRef.current, valueRef.current);
   };
   useEffect(() => {
     pendingRef.current = true;
