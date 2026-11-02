@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, Maximize2, Minimize2, Wand2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { AlertTriangle, Braces, Camera, Check, CircleCheck, Clapperboard, Copy, Download, FileDown, Loader2, ShieldCheck, Maximize2, Minimize2, Wand2, X } from "lucide-react";
 import { ChatPanel } from "../components/ChatPanel";
 import { CodeEditor } from "../components/CodeEditor";
 import { IconBtn, Panel } from "../components/Panel";
@@ -14,6 +14,7 @@ import type { Timeline } from "../engine/interpreter";
 import { loadEngineFonts } from "../engine/fonts";
 import type { LLMSettings } from "../lib/assistant";
 import { WELCOME_CODE } from "../lib/templates";
+import { inspectManimGXSource } from "../lib/manimgx-source-preflight";
 import { aiOrchestrator } from "../ai/orchestrator";
 import type { AiCandidateValidationV1 } from "../ai/validation";
 import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
@@ -85,6 +86,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const videoJobRef = useRef<RenderJobController | undefined>(undefined);
   const [copied, setCopied] = useState(false);
   const [reviewCandidateId, setReviewCandidateId] = useState<string | null>(null);
+  const [preflightOpen, setPreflightOpen] = useState(false);
   const playerRef = useRef<PlayerHandle>(null);
   const gxPreviewRef = useRef<ManimGXPreviewHandle>(null);
   const previewSurfaceRef = useRef<HTMLDivElement>(null);
@@ -114,6 +116,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     ? scene.revisions.find((revision) => revision.id === reviewCandidateId && revision.kind === "ai-candidate")
     : undefined;
   const displayedCode = reviewCandidate?.source ?? code;
+  const preflightIssues = useMemo(() => inspectManimGXSource(displayedCode), [displayedCode]);
   const selection = `${active.id}:${scene.id}`;
   const selectionRef = useRef(selection); selectionRef.current = selection;
 
@@ -616,6 +619,11 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
               </>
             )}
           </span>}
+          {scene.engineId === "manimgx-browser" && (
+            <IconBtn onClick={() => setPreflightOpen(value => !value)} title="Проверить Python-сцену">
+              <ShieldCheck size={14} />
+            </IconBtn>
+          )}
           <IconBtn onClick={copyCode} title="Копировать код">
             {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
           </IconBtn>
@@ -625,8 +633,28 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
         </>
       }
     >
-          {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
-          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
+          <div className="flex h-full min-h-0 flex-col">
+            {reviewCandidate && <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
+            {scene.engineId === "manimgx-browser" && preflightOpen && (
+              <section data-testid="manimgx-preflight" aria-label="Предварительная проверка Python" className="max-h-44 shrink-0 overflow-y-auto border-b border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-800">
+                <div className="mb-1 font-semibold">Проверка исходного кода ManimGX</div>
+                {preflightIssues.length === 0
+                  ? <p className="text-emerald-700 dark:text-emerald-300">Типичных ошибок не найдено.</p>
+                  : <ul className="space-y-1.5">
+                      {preflightIssues.map(issue => (
+                        <li key={issue.code + ":" + issue.line} className={issue.severity === "error" ? "text-red-700 dark:text-red-300" : "text-amber-800 dark:text-amber-300"}>
+                          <span className="font-semibold">Строка {issue.line}:</span> {issue.message}
+                        </li>
+                      ))}
+                    </ul>
+                }
+                <p className="mt-2 text-slate-500 dark:text-slate-400">Это предварительный анализ текста, а не выполнение Python. Наложения объектов и фактическую отрисовку он не проверяет.</p>
+              </section>
+            )}
+            <div className="min-h-0 flex-1">
+              <CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} />
+            </div>
+          </div>
     </Panel>
   );
 
