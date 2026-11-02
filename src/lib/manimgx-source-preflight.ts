@@ -38,7 +38,7 @@ function maskPythonStringsAndComments(source: string): string {
     }
     if (ch === "'" || ch === '"') {
       const triple = source.startsWith(ch.repeat(3), i);
-      quote = (triple ? ch.repeat(3) : ch) as typeof quote;
+      quote = (triple ? ch.repeat(3) : ch) as "\'\'\'" | '"""' | "\'" | '"';
       output += " ".repeat(quote.length);
       i += quote.length;
       continue;
