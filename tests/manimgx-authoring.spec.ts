@@ -52,3 +52,16 @@ class Lesson(m.Scene):
   });
   expect(result).toEqual({ network: "rejected", eval: "rejected", negative: "rejected", simple: "passed" });
 });
+
+test("GX offline assistant returns the authored example without forced 8-second rescaling", async ({ page }) => {
+  await page.goto("/#/studio");
+  const result = await page.evaluate(async () => {
+    const { localAssistant } = await import("/src/lib/assistant.ts");
+    const { SCIENCE_TEMPLATES } = await import("/src/lib/scientific-libraries.ts");
+    const template = SCIENCE_TEMPLATES[0];
+    const reply = localAssistant(template.prompt, "", true, "manimgx-browser");
+    return { original: template.code, generated: reply.code, canvasShort: localAssistant("Бросок под углом", "", true, "arhimed-canvas").code };
+  });
+  expect(result.generated).toBe(result.original);
+  expect(result.canvasShort).toContain("import manimx as m");
+});
