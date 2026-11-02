@@ -8,7 +8,7 @@ import { isJobActive, RenderJobController, type RenderJob } from "../rendering/j
 interface Props {
   projectId: string;
   scene: Scene;
-  onDiagnostic?: (message: string) => void;
+  onDiagnostic?: (message: string, line?: number) => void;
   onMp4ExportCapabilityChange?: (available: boolean) => void;
   onJobChange?: (job: RenderJob) => void;
 }
@@ -81,7 +81,7 @@ export const ManimGXPreview = forwardRef<ManimGXPreviewHandle, Props>(function M
               if (event.type === "diagnostic" && event.severity === "error") {
                 current.log("stderr", event.message);
                 current.fail(new Error(event.message));
-                callbacks.current.onDiagnostic?.(event.message);
+                callbacks.current.onDiagnostic?.(event.message, event.line);
               }
               if (event.type === "result" && event.result === "rendered") {
                 current.complete();

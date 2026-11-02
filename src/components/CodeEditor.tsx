@@ -1,4 +1,4 @@
-import { useMemo, useRef, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { MANIM_COLORS } from "../engine/colors";
 import { cn } from "../utils/cn";
 
@@ -90,6 +90,20 @@ export function CodeEditor({ value, onChange, errorLine, readOnly = false, baseV
     const lines = computeLineDiff(baseValue, value);
     return { lines, added: lines.filter((line) => line.kind === "add").length, removed: lines.filter((line) => line.kind === "del").length };
   }, [readOnly, baseValue, value]);
+  // A traceback line should be visible without stealing keyboard focus from the author.
+  // Mirror the scroll position across the textarea, syntax overlay and line-number gutter.
+  useEffect(() => {
+    if (!errorLine || readOnly || !Number.isInteger(errorLine)) return;
+    const ta = taRef.current;
+    if (!ta) return;
+    const count = value.split("\n").length;
+    if (errorLine < 1 || errorLine > count) return;
+    const top = Math.max(0, (errorLine - 1) * 20 - Math.max(0, ta.clientHeight * 0.3));
+    ta.scrollTop = top;
+    if (preRef.current) preRef.current.scrollTop = ta.scrollTop;
+    if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop;
+  }, [errorLine, readOnly]);
+
   const lines = value.split("\n").length;
   const gutterLines = useMemo(() => {
     if (!diffCounts) return Array.from({ length: lines }, (_, index) => ({ label: String(index + 1), kind: "same" as const }));
