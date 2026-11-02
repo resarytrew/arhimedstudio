@@ -10,7 +10,7 @@ m.config.pixel_width = 1080
 m.config.pixel_height = 1920
 
 class ThreeDimensionalLesson(m.ThreeDScene):
-    def construct(self):
+    def construct(self) -> None:
         axes = m.ThreeDAxes()
         title = m.Text("Геометрия", font_size=78)
         self.add(axes)
