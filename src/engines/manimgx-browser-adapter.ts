@@ -1,3 +1,4 @@
+import { sceneLineFromTraceback } from "../lib/python-diagnostics";
 import {
   ENGINE_ADAPTER_V1,
   type EngineAdapterV1,
@@ -205,7 +206,7 @@ export class ManimGXBrowserAdapterV1 implements EngineAdapterV1<ManimGXBrowserSe
           return;
         }
         if (session.activeContext?.requestId === message.requestId) {
-          onEvent({ ...session.activeContext, type: "diagnostic", severity: "error", message: message.detail ?? "ManimGX runtime failed." });
+          onEvent({ ...session.activeContext, type: "diagnostic", severity: "error", message: message.detail ?? "ManimGX runtime failed.", line: sceneLineFromTraceback(message.detail ?? "") });
         }
       } else if (session.activeContext?.requestId === message.requestId) {
         const current = session.activeContext;
