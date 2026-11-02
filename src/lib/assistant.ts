@@ -1,5 +1,6 @@
 import { genericCode, TEMPLATES } from "./templates";
 import { SCIENCE_TEMPLATES } from "./scientific-libraries";
+import { PRO_ANIMATION_TEMPLATES } from "./pro-animations";
 import type { AiEngineId } from "../ai/profiles";
 
 export interface AssistantReply {
@@ -358,7 +359,7 @@ export function localAssistant(prompt: string, currentCode: string, isFirst: boo
 
   // --- new scene from template ---
   if (engine === "manimgx-browser") {
-    const matches = SCIENCE_TEMPLATES.map(t => ({ t, score: t.prompt.toLowerCase() === p ? 100 : t.keywords.filter(keyword => p.includes(keyword)).length }))
+    const matches = [...SCIENCE_TEMPLATES, ...PRO_ANIMATION_TEMPLATES].map(t => ({ t, score: t.prompt.toLowerCase() === p ? 100 : t.keywords.filter(keyword => p.includes(keyword)).length }))
       .filter(item => item.score > 0).sort((a, b) => b.score - a.score);
     const match = matches[0]?.t;
     if (match) return { text: match.reply, code: match.code, title: isFirst ? match.title : undefined };
