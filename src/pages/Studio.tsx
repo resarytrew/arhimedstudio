@@ -57,7 +57,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [error, setError] = useState<{ msg: string; line: number } | null>(null);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [runtimeError, setRuntimeError] = useState<{ msg: string; line?: number } | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   const [booting, setBooting] = useState(true);
   const lastGood = useRef<string>("");
@@ -501,7 +501,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     >
       <div className="flex h-full min-h-0 flex-col">
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative min-h-0 flex-1 bg-black">
-        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
+        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={(message, line) => setRuntimeError(message ? { msg: message, line } : null)} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
         {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
@@ -534,10 +534,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="font-medium">Ошибка ManimGX</div>
-              <div className="truncate opacity-80">{runtimeError}</div>
+              <div className="truncate opacity-80">{runtimeError.msg}</div>
             </div>
             <button
-              onClick={() => repairWithAi(runtimeError)}
+              onClick={() => repairWithAi(runtimeError.msg)}
               className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 font-medium text-red-700 shadow-sm hover:bg-red-100 dark:bg-red-900 dark:text-red-100"
             >
               <Wand2 size={13} /> Исправить с ИИ
@@ -626,7 +626,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       }
     >
           {reviewCandidate && <div className="absolute inset-x-0 top-0 z-10 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">Просмотр версии ИИ. Превью остаётся на текущей сцене, пока вы не нажмёте «Применить».</div>}
-          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
+          <div className={cn("h-full", reviewCandidate && "pt-8")}><CodeEditor value={displayedCode} baseValue={reviewCandidate ? code : null} onChange={setCode} errorLine={reviewCandidate ? null : scene.engineId === "manimgx-browser" ? runtimeError?.line ?? null : visibleError?.line ?? null} readOnly={!!reviewCandidate} /></div>
     </Panel>
   );
 
