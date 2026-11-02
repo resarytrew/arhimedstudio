@@ -10,7 +10,7 @@ test("official ManimGX 0.1.1 examples are selectable without rescaling", async (
       id: t.id,
       title: t.title,
       hasAttribution: t.code.includes("academa-labs/manimgx v0.1.1"),
-      hasScene: /class\\s+\\w+\\s*\\(m\\.Scene\\)/.test(t.code),
+      hasScene: /class\s+\w+\s*\(m\.Scene\)/.test(t.code),
       returnedUnmodified: localAssistant(t.prompt, "", true, "manimgx-browser").code === t.code,
       validation: validateAiCandidate(t.code, "manimgx-browser").status,
       canvas: validateAiCandidate(t.code, "arhimed-canvas").status,
