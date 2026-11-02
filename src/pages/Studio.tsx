@@ -18,6 +18,7 @@ import { inspectManimGXSource } from "../lib/manimgx-source-preflight";
 import { aiOrchestrator } from "../ai/orchestrator";
 import type { AiCandidateValidationV1 } from "../ai/validation";
 import type { RenderedFrameInfoV1 } from "../engines/contracts";
+import { getMp4ExportPreflight } from "../lib/manimgx-export-preflight";
 import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
 import {
   ACTIVE_KEY,
@@ -86,6 +87,8 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [videoJob, setVideoJob] = useState<RenderJob | null>(null);
   const [lastVideo, setLastVideo] = useState<VideoArtifact | null>(null);
   const [renderedFrame, setRenderedFrame] = useState<RenderedFrameInfoV1 | null>(null);
+  const mp4Preflight = getMp4ExportPreflight(renderedFrame);
+  const mp4Blocked = mp4Preflight.some(issue => issue.blocking);
   const [videoStorageError, setVideoStorageError] = useState<string | null>(null);
   const [projectSaveFailed, setProjectSaveFailed] = useState(false);
   const videoJobRef = useRef<RenderJobController | undefined>(undefined);
@@ -352,6 +355,10 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       await doRecord();
       return;
     }
+    if (mp4Blocked) {
+      showToast(mp4Preflight.find(issue => issue.blocking)?.message ?? "Экспорт ограничен настройками сцены.");
+      return;
+    }
     if (!gxPreviewRef.current || !gxMp4ExportAvailable) {
       showToast("Этот ManimGX runtime пока не поддерживает экспорт MP4.");
       return;
@@ -517,7 +524,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
           <IconBtn
             onClick={() => void downloadVideo()}
             title={scene.engineId === "manimgx-browser" ? "Скачать видео (MP4)" : "Скачать видео (WebM)"}
-            disabled={scene.engineId === "manimgx-browser" ? !gxMp4ExportAvailable || recording !== null : !visibleTimeline || recording !== null}
+            disabled={scene.engineId === "manimgx-browser" ? !gxMp4ExportAvailable || recording !== null || mp4Blocked : !visibleTimeline || recording !== null}
           >
             <Download size={14} />
           </IconBtn>
@@ -585,7 +592,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       {scene.engineId === "manimgx-browser" && <RenderJobsPanel
         preview={previewJob?.projectId === active.id && previewJob.sceneId === scene.id ? previewJob : null}
         video={videoJob?.projectId === active.id && videoJob.sceneId === scene.id ? videoJob : null}
-        artifact={lastVideo} storageError={videoStorageError} renderedFrame={renderedFrame}
+        artifact={lastVideo} storageError={videoStorageError} renderedFrame={renderedFrame} mp4Preflight={mp4Preflight}
         onCancelPreview={() => gxPreviewRef.current?.cancelRender()}
         onRetry={() => gxPreviewRef.current?.retryRender()}
         onCancelVideo={() => videoJobRef.current?.cancel()}
