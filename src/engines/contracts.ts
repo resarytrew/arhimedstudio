@@ -29,12 +29,18 @@ export interface EngineRequestContextV1 {
   requestId: string;
 }
 
+export interface RenderedFrameInfoV1 {
+  width: number;
+  height: number;
+  duration: number;
+}
+
 export type EngineEventV1 =
   | (EngineRequestContextV1 & { type: "log"; stream: "stdout" | "stderr"; text: string })
   | (EngineRequestContextV1 & { type: "state"; state: "idle" | "loading" | "ready" | "running" | "stopped" | "disposed" })
   | (EngineRequestContextV1 & { type: "diagnostic"; severity: "info" | "warning" | "error"; message: string; line?: number })
   | (EngineRequestContextV1 & { type: "progress"; value: number; detail?: string })
-  | (EngineRequestContextV1 & { type: "result"; result: "loaded" | "rendered" | "stopped" | "unsupported"; detail?: string });
+  | (EngineRequestContextV1 & { type: "result"; result: "loaded" | "rendered" | "stopped" | "unsupported"; detail?: string; frame?: RenderedFrameInfoV1 });
 
 export type EngineResult<T> = { ok: true; value: T } | { ok: false; reason: "unsupported" | "unavailable" | "invalid-source" | "failed"; message: string };
 
