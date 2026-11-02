@@ -16,6 +16,7 @@ import type { LLMSettings } from "../lib/assistant";
 import { WELCOME_CODE } from "../lib/templates";
 import { aiOrchestrator } from "../ai/orchestrator";
 import type { AiCandidateValidationV1 } from "../ai/validation";
+import type { RenderedFrameInfoV1 } from "../engines/contracts";
 import { ArhimedCanvasAdapterV1 } from "../engines/canvas-adapter";
 import {
   ACTIVE_KEY,
@@ -81,6 +82,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
   const [previewJob, setPreviewJob] = useState<RenderJob | null>(null);
   const [videoJob, setVideoJob] = useState<RenderJob | null>(null);
   const [lastVideo, setLastVideo] = useState<VideoArtifact | null>(null);
+  const [renderedFrame, setRenderedFrame] = useState<RenderedFrameInfoV1 | null>(null);
   const [videoStorageError, setVideoStorageError] = useState<string | null>(null);
   const videoJobRef = useRef<RenderJobController | undefined>(undefined);
   const [copied, setCopied] = useState(false);
@@ -501,7 +503,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
     >
       <div className="flex h-full min-h-0 flex-col">
       <div ref={previewSurfaceRef} data-testid="preview-surface" className="preview-surface relative min-h-0 flex-1 bg-black">
-        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
+        {scene.engineId === "manimgx-browser" ? <div className="relative h-full"> <ManimGXPreview ref={gxPreviewRef} projectId={active.id} scene={scene} onDiagnostic={setRuntimeError} onMp4ExportCapabilityChange={setGxMp4ExportAvailable} onFrameInfo={setRenderedFrame} onJobChange={setPreviewJob} /> {!hasSceneSource && <div aria-label="Пустое превью" className="absolute inset-0 grid place-items-center bg-black text-sm text-slate-400">Добавьте код для превью</div>} </div> : hasSceneSource ? <Player ref={playerRef} timeline={visibleTimeline} /> : <div aria-label="Пустое превью" className="h-full bg-black" />}
         {scene.engineId === "arhimed-canvas" && hasSceneSource && booting && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-slate-300">
             <div className="space-y-2.5 text-[12.5px]">
@@ -558,7 +560,7 @@ export default function Studio({ dark, onToggleTheme, onHome }: Props) {
       {scene.engineId === "manimgx-browser" && <RenderJobsPanel
         preview={previewJob?.projectId === active.id && previewJob.sceneId === scene.id ? previewJob : null}
         video={videoJob?.projectId === active.id && videoJob.sceneId === scene.id ? videoJob : null}
-        artifact={lastVideo} storageError={videoStorageError}
+        artifact={lastVideo} storageError={videoStorageError} renderedFrame={renderedFrame}
         onCancelPreview={() => gxPreviewRef.current?.cancelRender()}
         onRetry={() => gxPreviewRef.current?.retryRender()}
         onCancelVideo={() => videoJobRef.current?.cancel()}
