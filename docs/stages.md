@@ -67,3 +67,29 @@ package hashes and stays within Pages size limits (approximately 72 MB).
 See [the library catalog](scientific-libraries.md) for supported operations,
 in-memory drawing adapters and the distinction between calculation, diagram
 layout and simulation.
+
+## Correction log — 2026-11-04
+
+The acceptance evidence above is a historical record and is left untouched. This entry closes gaps that
+appeared after it was written.
+
+1. **CI coverage.** The suite now contains 50 tests in 18 spec files and 15 Canvas starter scenes, so the
+   Stage 2 count stands. What did not stand is the cloud gate: the CI job ran a hand-maintained list of
+   spec files, and `tests/baseline.spec.ts` — the file holding every Canvas pixel baseline and the AI
+   contract checks — was missing from it. A stale expectation inside it (ManimGX typography `rejected`
+   instead of the accepted `warning`) therefore stayed hidden in `master`. The job now runs the whole
+   suite in Chrome through `npm run test:ci` and excludes only two tagged groups: `@visual` (pixel
+   baselines recorded on the Windows workstation described above) and `@published` (a smoke test of the
+   deployed Pages build). `deploy-pages` now depends on that job, so a red suite cannot publish.
+2. **Source baseline enforcement.** `docs/source-baseline.json` claimed to be "covered by the baseline
+   tests" while no test read it. `tests/source-baseline.spec.ts` now verifies the current hash of every
+   recorded file, preserves the original Stage 0 value separately, and fails when a new `src/engine`
+   module is added without registration. `npm run baseline:update` refreshes the manifest after a
+   reviewed change.
+3. **MP4 export.** The Studio adapter, the export protocol and the runtime overlay in
+   `integration/manimgx-runtime-mp4/` are implemented, and CI compiles the overlay against the public
+   runtime. The overlay has never been deployed to `arhimed-runtime.github.io` (403 on branch creation in
+   that repository), so the MP4 control stays disabled there. Treat MP4 export as unreleased until the
+   overlay is published and a real WebGPU Chrome/Edge export is attached to this document. The overlay
+   workflow also triggered on a branch that no longer exists; it now runs for `master` and pull requests
+   that touch the overlay, and records the exact upstream runtime commit it built against.

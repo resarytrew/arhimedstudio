@@ -1,5 +1,11 @@
 # ManimGX MP4 export protocol
 
+> **Deployment status: not released.** This protocol and the matching overlay in
+> `integration/manimgx-runtime-mp4/` are implemented in Studio and compiled in CI against the public
+> runtime, but the overlay is not deployed to `arhimed-runtime.github.io`. On that runtime the
+> capability handshake below never advertises `mp4Export`, so Studio keeps the MP4 control disabled.
+> See the access limitation in [the overlay README](../integration/manimgx-runtime-mp4/README.md).
+
 The ManimGX preview is intentionally a cross-origin, sandboxed iframe. Studio cannot
 read its canvas or safely record it from the parent page. MP4 export is consequently
 performed in the runtime and the completed file is returned through the authenticated
