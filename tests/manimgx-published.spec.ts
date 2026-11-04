@@ -21,7 +21,9 @@ class FullBrowserScene(Scene):
         self.wait(0.1)
 `;
 
-test("published Studio completes a documented ManimGX scene on the isolated runtime origin", async ({ page }) => {
+// This check drives the deployed GitHub Pages build, not the local one. It is a production
+// smoke test, so it is tagged instead of running on every pull request.
+test("published Studio completes a documented ManimGX scene on the isolated runtime origin", { tag: "@published" }, async ({ page }) => {
   await page.goto(publishedStudio);
   const engine = page.getByLabel("Движок сцены");
   await engine.selectOption("manimgx-browser");

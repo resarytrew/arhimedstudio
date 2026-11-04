@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-test('all original scenes: deterministic frames, finite geometry, timings', async ({ page }, info) => {
+// Visual baselines are recorded on the maintainer's Windows workstation (see docs/stages.md).
+// Cloud CI does not compare pixels, so the tag lets it skip this check deliberately.
+test('all original scenes: deterministic frames, finite geometry, timings', { tag: '@visual' }, async ({ page }, info) => {
   await page.goto('/');
   const report = await page.evaluate(async () => {
     // @ts-expect-error Vite serves the source modules for this browser-only regression harness.
@@ -273,7 +275,10 @@ test('AI uses one engine profile, rejects known incompatible code, and creates a
   expect(result.badImport.status).toBe('rejected');
   expect(result.badNumpy.status).toBe('rejected');
   expect(result.badCanvas.status).toBe('rejected');
-  expect(result.cramped.status).toBe('rejected');
+  // ManimGX has no Canvas 48/56 typography ceiling (src/ai/profiles.ts, GX profile). Oversized
+  // text is an authoring warning there; only the Canvas profile turns it into a rejection.
+  // Hard rejections (unknown imports, np.math, Canvas-only APIs) are asserted above.
+  expect(result.cramped.status).toBe('warning');
   expect(result.canvasFallback).toBeGreaterThanOrEqual(7);
   expect(result.canvasFallback).toBeLessThanOrEqual(10);
 });
