@@ -1,97 +1,147 @@
 {
+  "schemaVersion": 2,
   "sourceRoot": "C:\\Users\\enekr\\OneDrive\\Документы\\Arhimed",
+  "recordedAt": "2026-11-04",
+  "hashAlgorithm": "sha256 over UTF-8 bytes after CRLF-to-LF normalization",
+  "note": "baselineSha256 is the original Stage 0 value and never changes. sha256 is the current reviewable value; tests/source-baseline.spec.ts fails when a file changes without updating this manifest, or when a new src/engine module is added without registering it.",
   "files": [
     {
       "path": "src/App.tsx",
-      "sha256": "2f3cc7bc11a22273b8f8f5d4f33c6b0d746b5229bb2f823b31777297c356b090"
+      "baselineSha256": "2f3cc7bc11a22273b8f8f5d4f33c6b0d746b5229bb2f823b31777297c356b090",
+      "sha256": "2f3cc7bc11a22273b8f8f5d4f33c6b0d746b5229bb2f823b31777297c356b090",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/components/ChatPanel.tsx",
-      "sha256": "1b8848dfe2d79a765f2f1a618018c48fabbfffdb9f3704ed0632a6386bbd0b86"
+      "baselineSha256": "1b8848dfe2d79a765f2f1a618018c48fabbfffdb9f3704ed0632a6386bbd0b86",
+      "sha256": "d0b14b110669f6230a7c5e3da5c4ed83c6a833b4a55616cfef642c23fc523019",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/components/CodeEditor.tsx",
-      "sha256": "3f66a8bf8f8482946c107c8ea9344bc04c9a3845badb5a0e99ccbb1fbac356c7"
+      "baselineSha256": "3f66a8bf8f8482946c107c8ea9344bc04c9a3845badb5a0e99ccbb1fbac356c7",
+      "sha256": "9e9f789fd2c578202456f2bab8c1749e3f9fadbe00b84d0e6f4c7df3dc9d9ec0",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/components/Logo.tsx",
-      "sha256": "261a90a432d3c210a62155f31b8f2451e89e02fa5a26fa7e85986943bedd40c7"
+      "baselineSha256": "261a90a432d3c210a62155f31b8f2451e89e02fa5a26fa7e85986943bedd40c7",
+      "sha256": "261a90a432d3c210a62155f31b8f2451e89e02fa5a26fa7e85986943bedd40c7",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/components/Panel.tsx",
-      "sha256": "6fcda9a6cb9d507aae576d3b9992979cde3e64dadbebaae5ecfbdc9d45e5ca75"
+      "baselineSha256": "6fcda9a6cb9d507aae576d3b9992979cde3e64dadbebaae5ecfbdc9d45e5ca75",
+      "sha256": "6fcda9a6cb9d507aae576d3b9992979cde3e64dadbebaae5ecfbdc9d45e5ca75",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/components/Player.tsx",
-      "sha256": "353c23c1013992077e909f7392bb845f20ca33273517f1274220cb32d937501f"
+      "baselineSha256": "353c23c1013992077e909f7392bb845f20ca33273517f1274220cb32d937501f",
+      "sha256": "353c23c1013992077e909f7392bb845f20ca33273517f1274220cb32d937501f",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/components/SettingsModal.tsx",
-      "sha256": "34cc09a63500d5042134250b055b83ee88789d6c9154b91cdd4071c410055356"
+      "baselineSha256": "34cc09a63500d5042134250b055b83ee88789d6c9154b91cdd4071c410055356",
+      "sha256": "6603c99d403f4c6f5a0c249c5080ba49dbbe08516e94754ac3d7fb112e1dbb22",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/components/Sidebar.tsx",
-      "sha256": "31cc5089195adde2ce5759ef883c482398f42f71147b51d65064a917b94c8ed8"
+      "baselineSha256": "31cc5089195adde2ce5759ef883c482398f42f71147b51d65064a917b94c8ed8",
+      "sha256": "06bc1ab19d0a3b3f41e88a01e972bf4e32246a7b3244201b253327c331215ef1",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/engine/colors.ts",
-      "sha256": "37a4c712835ed08abd25761b7f45242505eedf5b564827aa5d115fd44b28436a"
+      "baselineSha256": "37a4c712835ed08abd25761b7f45242505eedf5b564827aa5d115fd44b28436a",
+      "sha256": "ea5560b70a257831fdf987c689211f018ab3c48eeefcde052b04faef15c58d44",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/engine/fonts.ts",
-      "sha256": "b53079e5dbf36474e49eb31a3def7136e201d8dc170c1acd78a98f2f42903626"
+      "baselineSha256": "b53079e5dbf36474e49eb31a3def7136e201d8dc170c1acd78a98f2f42903626",
+      "sha256": "b53079e5dbf36474e49eb31a3def7136e201d8dc170c1acd78a98f2f42903626",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/engine/interpreter.ts",
-      "sha256": "c5603c87017e71fe0ca74b7556e3ebfdac734a33b91974433bd28f64cf0109c6"
+      "baselineSha256": "c5603c87017e71fe0ca74b7556e3ebfdac734a33b91974433bd28f64cf0109c6",
+      "sha256": "4d2272fe5ba6c816eca18fd748e8b60a12636731e126d007f114b329975f9696",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/engine/mobject.ts",
-      "sha256": "e1459deb58361674c01a35912c0bd5bbd08b47ba2513223b2b0a0c1e18df6bbc"
+      "baselineSha256": "e1459deb58361674c01a35912c0bd5bbd08b47ba2513223b2b0a0c1e18df6bbc",
+      "sha256": "e1459deb58361674c01a35912c0bd5bbd08b47ba2513223b2b0a0c1e18df6bbc",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/engine/morph.ts",
-      "sha256": "2c949854232ac5af6bffe3cee9e02b232687c5b2baa2459b96ff9ab4b8a9b303"
+      "baselineSha256": "2c949854232ac5af6bffe3cee9e02b232687c5b2baa2459b96ff9ab4b8a9b303",
+      "sha256": "2c949854232ac5af6bffe3cee9e02b232687c5b2baa2459b96ff9ab4b8a9b303",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/engine/parser.ts",
-      "sha256": "580253b7f565f57f9290bf86cf7f908d4b8996da4af2cba114999f64e4df963c"
+      "baselineSha256": "580253b7f565f57f9290bf86cf7f908d4b8996da4af2cba114999f64e4df963c",
+      "sha256": "1f2a3dcdb19036933f83ee0096f2184fd18dcb3ce282879455ca49c6220a0f4a",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/engine/renderer.ts",
-      "sha256": "9f495573ded07ca0e7e0016f654483548ea6794f77872a613cd73a426e4f26ae"
+      "baselineSha256": "9f495573ded07ca0e7e0016f654483548ea6794f77872a613cd73a426e4f26ae",
+      "sha256": "9f495573ded07ca0e7e0016f654483548ea6794f77872a613cd73a426e4f26ae",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/index.css",
-      "sha256": "77df37332694842a00219750e9d774debcb1f19833189c174b47ffeac5596342"
+      "baselineSha256": "77df37332694842a00219750e9d774debcb1f19833189c174b47ffeac5596342",
+      "sha256": "618be3be31c79a574d1e32a743c7f9417278e1f67fa9131cac8f7066ecc78404",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/lib/assistant.ts",
-      "sha256": "acf5ca346d968b12f6d4709af5f3220fd983bd6680987e4501eb52d6fb1bf6e7"
+      "baselineSha256": "acf5ca346d968b12f6d4709af5f3220fd983bd6680987e4501eb52d6fb1bf6e7",
+      "sha256": "2427b9328139efd878312038efdf7652f433537e8e0affd7c1be4b18f8758c46",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/lib/store.ts",
-      "sha256": "21b1696e8cec35b6c8e6f03c429c499dfee5494db93c41ef66aa06c2f5e58c78"
+      "baselineSha256": "21b1696e8cec35b6c8e6f03c429c499dfee5494db93c41ef66aa06c2f5e58c78",
+      "sha256": "f9f151a74477fc4d9f96ac81b46d1f0a06248fa46071992a1e0e0fd2d24c57ee",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/lib/templates.ts",
-      "sha256": "0040ea7bbab95ba872ff50f289bcf19449b30809535c69e28e52e6302ccb9b39"
+      "baselineSha256": "0040ea7bbab95ba872ff50f289bcf19449b30809535c69e28e52e6302ccb9b39",
+      "sha256": "2023250cdb99c72baf2c5e4d0e546fcc2b08669b7e5c787c12a9626668707710",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/main.tsx",
-      "sha256": "f268dc44f71240012de0cfb1569d8ac906265cccd45eb3a99059c1a663d2f830"
+      "baselineSha256": "f268dc44f71240012de0cfb1569d8ac906265cccd45eb3a99059c1a663d2f830",
+      "sha256": "afd1dc1c3c55408b92e610f44ff5bdb6b7a594bb169758d5fa9fca44c3e4b73a",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/pages/Landing.tsx",
-      "sha256": "c84ac1038098469a5249b933d4864d2aafd99d5a41f4b00a91cdd91e74e2ae79"
+      "baselineSha256": "c84ac1038098469a5249b933d4864d2aafd99d5a41f4b00a91cdd91e74e2ae79",
+      "sha256": "c84ac1038098469a5249b933d4864d2aafd99d5a41f4b00a91cdd91e74e2ae79",
+      "changedSinceBaseline": false
     },
     {
       "path": "src/pages/Studio.tsx",
-      "sha256": "1a668ec1bd7a127aa05d9659c98a8cc37ffc61762f607409ef7530bd1484468f"
+      "baselineSha256": "1a668ec1bd7a127aa05d9659c98a8cc37ffc61762f607409ef7530bd1484468f",
+      "sha256": "16c6502029532f7d0708e588302c49541b3dcceeefdd7ac32c8a0894c6653367",
+      "changedSinceBaseline": true
     },
     {
       "path": "src/utils/cn.ts",
-      "sha256": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27"
+      "baselineSha256": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27",
+      "sha256": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27",
+      "changedSinceBaseline": false
     }
   ]
 }
