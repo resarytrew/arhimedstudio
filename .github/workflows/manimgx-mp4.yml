@@ -1,7 +1,12 @@
 name: Validate ManimGX MP4 runtime overlay
 on:
   push:
-    branches: [feat/manimgx-mp4-export]
+    branches: [master]
+    paths:
+      - 'integration/manimgx-runtime-mp4/**'
+      - 'src/components/ManimGXPreview.tsx'
+      - 'src/engines/manimgx-browser-adapter.ts'
+      - '.github/workflows/manimgx-mp4.yml'
   pull_request:
     paths:
       - 'integration/manimgx-runtime-mp4/**'
@@ -21,6 +26,13 @@ jobs:
           node-version: '24'
       - name: Retrieve public isolated runtime
         run: git clone --depth 1 https://github.com/arhimed-runtime/arhimed-runtime.github.io.git /tmp/arhimed-mp4-runtime
+      # The overlay is compiled against the runtime's moving main branch. Recording the exact
+      # revision keeps a failure reproducible instead of "the upstream changed at some point".
+      - name: Record the runtime revision under test
+        run: |
+          RUNTIME_SHA=$(git -C /tmp/arhimed-mp4-runtime rev-parse HEAD)
+          echo "Isolated runtime HEAD: $RUNTIME_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "ARHIMED_RUNTIME_SHA=$RUNTIME_SHA" >> "$GITHUB_ENV"
       - name: Apply MP4 runtime sources
         run: cp integration/manimgx-runtime-mp4/src/*.ts /tmp/arhimed-mp4-runtime/src/
       - name: Install locked runtime dependencies and MP4 muxer

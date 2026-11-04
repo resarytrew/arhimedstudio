@@ -20,8 +20,8 @@ jobs:
         with:
           name: arhimed-static
           path: dist
-  test-manimgx-session:
-    name: ManimGX runtime session regression (mocked cross-origin)
+  test-studio:
+    name: Browser regression suite (Chrome, mocked cross-origin)
     # Playwright 1.56 does not support ubuntu-26.04 FFmpeg installation.
     runs-on: ubuntu-24.04
     steps:
@@ -33,11 +33,26 @@ jobs:
       - run: npm ci
       - run: python3 -m compileall -q examples/manimgx
       - run: npx playwright install --with-deps chrome
-      - run: npx playwright test tests/manimgx-session.spec.ts tests/scientific-libraries.spec.ts tests/manimgx-authoring.spec.ts tests/manimgx-pro-examples.spec.ts tests/manimgx-python-diagnostics.spec.ts tests/project-persistence-warning.spec.ts tests/manimgx-source-preflight.spec.ts tests/manimgx-rendered-frame-info.spec.ts tests/manimgx-export-preflight.spec.ts tests/render-lifecycle.spec.ts tests/manimgx-mp4.spec.ts --project=chrome
+      # The whole suite runs here. Two groups are excluded on purpose:
+      #   @visual    — pixel baselines recorded on the maintainer's Windows workstation.
+      #   @published — drives the deployed GitHub Pages build, not the local one.
+      # Keeping an exclusion list instead of an inclusion list means a newly added spec
+      # file is covered automatically; forgetting to register it does not hide regressions.
+      - name: Run the browser regression suite
+        run: npx playwright test --project=chrome --grep-invert "@visual|@published"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: |
+            test-results
+            playwright-report
+          retention-days: 7
 
   deploy-pages:
+    # Publishing is gated on the same checks that protect master: a red suite must not ship.
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: build
+    needs: [build, test-studio]
     runs-on: ubuntu-latest
     permissions:
       pages: write
